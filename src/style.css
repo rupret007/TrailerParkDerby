@@ -121,3 +121,27 @@ kbd {
 #btn-start:hover {
   filter: brightness(1.08);
 }
+
+#touch-pad {
+  display: none;
+  position: absolute;
+  inset: auto 12px 12px 12px;
+  pointer-events: none;
+  z-index: 5;
+}
+@media (pointer: coarse), (max-width: 900px) {
+  #touch-pad { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+}
+.pad {
+  pointer-events: auto;
+  min-height: 52px;
+  border: 1px solid rgba(120,200,255,0.45);
+  border-radius: 12px;
+  background: rgba(10,18,32,0.72);
+  color: #d8f0ff;
+  font-size: 18px;
+  touch-action: none;
+  user-select: none;
+}
+.pad:active { background: rgba(60,120,200,0.55); }
+.pad-wide { grid-column: span 1; font-size: 14px; letter-spacing: 0.04em; }

@@ -50,3 +50,9 @@ Original vector art drawn in code — no external media.
 ## Stack
 
 Vite + vanilla TypeScript.
+
+## Extras (v1.1)
+- **Perfect park:** centered + slow on the bed stacks a bonus streak
+- **Near miss:** skim AI traffic for combo-scaled points
+- **Touch pads:** on-screen controls for phone/tablet
+- Park spark bursts (gold on perfect)

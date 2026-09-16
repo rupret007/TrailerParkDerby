@@ -13,6 +13,13 @@
         <div id="score-line">Score: <span id="score">0</span> · Combo x<span id="combo">1</span> · Best: <span id="best">0</span></div>
         <div id="hint">Park on the moving trailer · hold ~1.5s</div>
       </div>
+      <div id="touch-pad" aria-label="Touch controls">
+        <button type="button" id="pad-left" class="pad">◀</button>
+        <button type="button" id="pad-right" class="pad">▶</button>
+        <button type="button" id="pad-accel" class="pad">▲</button>
+        <button type="button" id="pad-brake" class="pad">▼</button>
+        <button type="button" id="pad-hb" class="pad pad-wide">HB</button>
+      </div>
       <div id="overlay" class="overlay">
         <div class="panel" id="title-panel">
           <h1>TrailerParkDerby</h1>
@@ -23,6 +30,7 @@
             <li>Drive onto the <strong>moving trailer</strong> bed and stay parked ~1.5s to score</li>
             <li>Fall off / miss = retry · grab neon <strong>boost</strong> orbs</li>
             <li><kbd>N</kbd> neon night · <kbd>M</kbd> mute · <kbd>Enter</kbd> start</li>
+            <li>Perfect park (centered + slow) stacks bonus · near-miss AI for points · touch pads on phone</li>
           </ul>
           <button id="btn-start" type="button">START ENGINE</button>
         </div>

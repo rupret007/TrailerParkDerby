@@ -57,6 +57,11 @@ let messageT = 0
 let boostUntil = 0
 let lastTs = 0
 let audioCtx: AudioContext | null = null
+let perfectStreak = 0
+let nearMissCd = 0
+type Spark = { x: number; y: number; vx: number; vy: number; life: number; color: string }
+const sparks: Spark[] = []
+const touch = { accel: false, brake: false, left: false, right: false, handbrake: false }
 
 const player: Car = {
   x: CX - TRACK.rx,
@@ -184,6 +189,9 @@ function startGame() {
   combo = 1
   parkTimer = 0
   boostUntil = 0
+  perfectStreak = 0
+  nearMissCd = 0
+  sparks.length = 0
   trailer.progress = 0.05
   placeBoosts()
   resetPlayerNearStart()
@@ -244,11 +252,11 @@ function pointInTrailerBed(px: number, py: number): boolean {
 }
 
 function updatePlayer(dt: number) {
-  const accel = keys.has('KeyW') || keys.has('ArrowUp')
-  const brake = keys.has('KeyS') || keys.has('ArrowDown')
-  const left = keys.has('KeyA') || keys.has('ArrowLeft')
-  const right = keys.has('KeyD') || keys.has('ArrowRight')
-  const handbrake = keys.has('Space')
+  const accel = keys.has('KeyW') || keys.has('ArrowUp') || touch.accel
+  const brake = keys.has('KeyS') || keys.has('ArrowDown') || touch.brake
+  const left = keys.has('KeyA') || keys.has('ArrowLeft') || touch.left
+  const right = keys.has('KeyD') || keys.has('ArrowRight') || touch.right
+  const handbrake = keys.has('Space') || touch.handbrake
 
   const boosted = performance.now() < boostUntil
   const maxSpeed = boosted ? 320 : 240
@@ -328,6 +336,56 @@ function updateBoosts(now: number) {
   }
 }
 
+function spawnParkSparks(perfect: boolean) {
+  const n = perfect ? 28 : 14
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2
+    const sp = 40 + Math.random() * 120
+    sparks.push({
+      x: player.x,
+      y: player.y,
+      vx: Math.cos(a) * sp,
+      vy: Math.sin(a) * sp,
+      life: 0.45 + Math.random() * 0.35,
+      color: perfect ? '#ffe066' : '#7affb0',
+    })
+  }
+}
+
+function updateSparks(dt: number) {
+  for (let i = sparks.length - 1; i >= 0; i--) {
+    const s = sparks[i]
+    s.life -= dt
+    s.x += s.vx * dt
+    s.y += s.vy * dt
+    s.vx *= 0.96
+    s.vy *= 0.96
+    if (s.life <= 0) sparks.splice(i, 1)
+  }
+}
+
+function updateNearMiss(dt: number) {
+  nearMissCd = Math.max(0, nearMissCd - dt)
+  if (nearMissCd > 0) return
+  for (const c of aiCars) {
+    const d = Math.hypot(c.x - player.x, c.y - player.y)
+    if (d > 28 && d < 48 && Math.abs(player.speed) > 90) {
+      const bonus = 15 * combo
+      score += bonus
+      scoreEl.textContent = String(score)
+      if (score > best) {
+        best = score
+        localStorage.setItem(HS_KEY, String(best))
+        bestEl.textContent = String(best)
+      }
+      flash(`NEAR MISS +${bonus}`)
+      beep(990, 0.05, 'square', 0.03)
+      nearMissCd = 1.1
+      break
+    }
+  }
+}
+
 function updateParking(dt: number) {
   const onBed =
     pointInTrailerBed(player.x, player.y) &&
@@ -336,25 +394,45 @@ function updateParking(dt: number) {
   if (onBed) {
     parkTimer += dt
     if (parkTimer >= 1.5) {
-      const gained = 100 * combo
+      const pose = trailerPose()
+      // local bed coords for centering
+      const dx = player.x - pose.x
+      const dy = player.y - pose.y
+      const c = Math.cos(-pose.angle)
+      const s = Math.sin(-pose.angle)
+      const lx = dx * c - dy * s
+      const ly = dx * s + dy * c
+      const bedMidX = -(trailer.cabL * 0.15 + trailer.bedL / 2)
+      const centered = Math.abs(lx - bedMidX) < 18 && Math.abs(ly) < 10
+      const slow = Math.abs(player.speed) < 22
+      const perfect = centered && slow
+
+      let gained = 100 * combo
+      if (perfect) {
+        perfectStreak = Math.min(5, perfectStreak + 1)
+        gained += 50 * combo * perfectStreak
+      } else {
+        perfectStreak = 0
+      }
+
       score += gained
       combo = Math.min(9, combo + 1)
       scoreEl.textContent = String(score)
       comboEl.textContent = String(combo)
+      spawnParkSparks(perfect)
       if (score > best) {
         best = score
         localStorage.setItem(HS_KEY, String(best))
         bestEl.textContent = String(best)
-        flash(`PARKED! +${gained} NEW BEST`)
+        flash(perfect ? `PERFECT x${perfectStreak}! +${gained} NEW BEST` : `PARKED! +${gained} NEW BEST`)
       } else {
-        flash(`PARKED! +${gained}`)
+        flash(perfect ? `PERFECT x${perfectStreak}! +${gained}` : `PARKED! +${gained}`)
       }
       beep(523, 0.09, 'triangle', 0.05)
       beep(659, 0.09, 'triangle', 0.05)
       beep(784, 0.14, 'triangle', 0.05)
+      if (perfect) beep(988, 0.16, 'triangle', 0.045)
       parkTimer = 0
-      // kick player off bed so they must re-approach
-      const pose = trailerPose()
       const n = { x: -Math.sin(pose.angle), y: Math.cos(pose.angle) }
       player.x += n.x * 70
       player.y += n.y * 70
@@ -362,9 +440,9 @@ function updateParking(dt: number) {
     }
   } else {
     if (parkTimer > 0.25 && pointInTrailerBed(player.x, player.y) === false) {
-      // left the bed after partial park
       if (parkTimer > 0.4) {
         combo = 1
+        perfectStreak = 0
         comboEl.textContent = '1'
         flash('Fell off — retry')
         beep(180, 0.15, 'square', 0.04)
@@ -559,6 +637,22 @@ function drawBoosts(now: number) {
   }
 }
 
+function drawSparks() {
+  for (const s of sparks) {
+    ctx.globalAlpha = Math.max(0, Math.min(1, s.life * 2))
+    ctx.fillStyle = s.color
+    if (neonNight) {
+      ctx.shadowColor = s.color
+      ctx.shadowBlur = 8
+    }
+    ctx.beginPath()
+    ctx.arc(s.x, s.y, 3, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.shadowBlur = 0
+    ctx.globalAlpha = 1
+  }
+}
+
 function drawHudOverlay() {
   // park progress bar
   if (parkTimer > 0) {
@@ -607,6 +701,8 @@ function frame(ts: number) {
   updateTrailer(dt)
   updateBoosts(ts)
   updateParking(dt)
+  updateNearMiss(dt)
+  updateSparks(dt)
   if (messageT > 0) messageT -= dt
 
   drawTrack()
@@ -614,6 +710,7 @@ function frame(ts: number) {
   drawBoosts(ts)
   for (const c of aiCars) drawCar(c)
   drawCar(player)
+  drawSparks()
   drawHudOverlay()
 
   requestAnimationFrame(frame)
@@ -640,6 +737,36 @@ function titlePreview(ts: number) {
   for (const c of aiCars) drawCar(c)
   requestAnimationFrame(titlePreview)
 }
+
+
+function bindTouchPad() {
+  const map: Record<string, keyof typeof touch> = {
+    'pad-accel': 'accel',
+    'pad-brake': 'brake',
+    'pad-left': 'left',
+    'pad-right': 'right',
+    'pad-hb': 'handbrake',
+  }
+  for (const [id, key] of Object.entries(map)) {
+    const el = document.getElementById(id)
+    if (!el) continue
+    const down = (e: Event) => {
+      e.preventDefault()
+      touch[key] = true
+      ensureAudio()
+    }
+    const up = (e: Event) => {
+      e.preventDefault()
+      touch[key] = false
+    }
+    el.addEventListener('pointerdown', down)
+    el.addEventListener('pointerup', up)
+    el.addEventListener('pointerleave', up)
+    el.addEventListener('pointercancel', up)
+  }
+}
+
+bindTouchPad()
 
 placeBoosts()
 lastTs = performance.now()
