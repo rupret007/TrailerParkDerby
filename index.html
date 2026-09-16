@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TrailerParkDerby</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="game" width="960" height="640"></canvas>
+      <div id="hud">
+        <div id="score-line">Score: <span id="score">0</span> · Combo x<span id="combo">1</span> · Best: <span id="best">0</span></div>
+        <div id="hint">Park on the moving trailer · hold ~1.5s</div>
+      </div>
+      <div id="overlay" class="overlay">
+        <div class="panel" id="title-panel">
+          <h1>TrailerParkDerby</h1>
+          <p class="tagline">Oval night race · park the moving flatbed</p>
+          <ul class="howto">
+            <li><kbd>W</kbd>/<kbd>↑</kbd> accelerate · <kbd>S</kbd>/<kbd>↓</kbd> brake</li>
+            <li><kbd>A</kbd>/<kbd>D</kbd> or ←/→ steer · <kbd>Space</kbd> handbrake</li>
+            <li>Drive onto the <strong>moving trailer</strong> bed and stay parked ~1.5s to score</li>
+            <li>Fall off / miss = retry · grab neon <strong>boost</strong> orbs</li>
+            <li><kbd>N</kbd> neon night · <kbd>M</kbd> mute · <kbd>Enter</kbd> start</li>
+          </ul>
+          <button id="btn-start" type="button">START ENGINE</button>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

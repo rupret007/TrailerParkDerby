@@ -1,0 +1,123 @@
+:root {
+  color-scheme: dark;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  background: #0a0c12;
+  color: #e8f0ff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: radial-gradient(ellipse at center, #12182a 0%, #06080e 70%);
+}
+
+#app {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem;
+}
+
+#game {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border: 2px solid #3a4a6a;
+  border-radius: 8px;
+  box-shadow: 0 0 40px rgba(80, 160, 255, 0.25), inset 0 0 0 1px #1a2030;
+  background: #0d1118;
+  cursor: crosshair;
+}
+
+#hud {
+  width: min(960px, 100%);
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.95rem;
+  opacity: 0.95;
+}
+
+#hint {
+  color: #8ab4ff;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 6, 12, 0.72);
+  backdrop-filter: blur(4px);
+  z-index: 10;
+}
+
+.overlay.hidden {
+  display: none;
+}
+
+.panel {
+  width: min(520px, 92vw);
+  padding: 1.75rem 1.5rem;
+  border-radius: 14px;
+  border: 1px solid #3d5a8a;
+  background: linear-gradient(160deg, #151c2e, #0c101a);
+  box-shadow: 0 0 48px rgba(60, 140, 255, 0.2);
+  text-align: center;
+}
+
+.panel h1 {
+  margin: 0 0 0.35rem;
+  font-size: 1.85rem;
+  letter-spacing: 0.04em;
+  color: #7ec8ff;
+  text-shadow: 0 0 18px rgba(90, 180, 255, 0.55);
+}
+
+.tagline {
+  margin: 0 0 1rem;
+  color: #9aa8c4;
+}
+
+.howto {
+  text-align: left;
+  margin: 0 0 1.25rem;
+  padding-left: 1.1rem;
+  line-height: 1.55;
+  color: #c5d2ea;
+}
+
+kbd {
+  display: inline-block;
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+  border: 1px solid #4a5d80;
+  background: #1a2233;
+  font-size: 0.85em;
+}
+
+#btn-start {
+  appearance: none;
+  border: none;
+  border-radius: 999px;
+  padding: 0.7rem 1.6rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #061018;
+  background: linear-gradient(90deg, #5ad0ff, #7affb0);
+  cursor: pointer;
+  box-shadow: 0 0 24px rgba(90, 220, 255, 0.45);
+}
+
+#btn-start:hover {
+  filter: brightness(1.08);
+}
