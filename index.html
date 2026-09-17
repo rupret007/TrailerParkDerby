@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="theme-color" content="#0a1220" />
     <title>TrailerParkDerby</title>
     <link rel="stylesheet" href="/src/style.css" />
@@ -15,25 +16,40 @@
       <div id="hud">
         <div id="score-line">Score: <span id="score">0</span> · Combo x<span id="combo">1</span> · Best: <span id="best">0</span></div>
         <div id="hint">Park on the moving trailer · hold ~1.5s</div>
+        <div id="orient-hint" class="hidden" hidden>Rotate to landscape for the best race</div>
       </div>
-      <div id="touch-pad" aria-label="Touch controls">
-        <button type="button" id="pad-left" class="pad">◀</button>
-        <button type="button" id="pad-right" class="pad">▶</button>
-        <button type="button" id="pad-accel" class="pad">▲</button>
-        <button type="button" id="pad-brake" class="pad">▼</button>
-        <button type="button" id="pad-hb" class="pad pad-wide">HB</button>
+
+      <!-- Mobile / touch only — hidden on desktop keyboard play -->
+      <div id="touch-pad" class="hidden" aria-label="Touch controls" hidden>
+        <div class="pad-cluster pad-left-cluster">
+          <button type="button" id="pad-left" class="pad pad-steer">◀</button>
+          <button type="button" id="pad-right" class="pad pad-steer">▶</button>
+        </div>
+        <div class="pad-cluster pad-right-cluster">
+          <button type="button" id="pad-accel" class="pad pad-drive">GAS</button>
+          <button type="button" id="pad-brake" class="pad pad-drive">BRAKE</button>
+          <button type="button" id="pad-hb" class="pad pad-hb">HANDBRAKE</button>
+        </div>
       </div>
+
       <div id="overlay" class="overlay">
         <div class="panel" id="title-panel">
           <h1>TrailerParkDerby</h1>
           <p class="tagline">Oval night race · park the moving flatbed</p>
-          <ul class="howto">
+          <ul class="howto howto-desktop">
             <li><kbd>W</kbd>/<kbd>↑</kbd> accelerate · <kbd>S</kbd>/<kbd>↓</kbd> brake</li>
             <li><kbd>A</kbd>/<kbd>D</kbd> or ←/→ steer · <kbd>Space</kbd> handbrake</li>
             <li>Drive onto the <strong>moving trailer</strong> bed and stay parked ~1.5s to score</li>
             <li>Fall off / miss = retry · grab neon <strong>boost</strong> orbs</li>
             <li><kbd>N</kbd> neon night · <kbd>M</kbd> mute · <kbd>Enter</kbd> start</li>
-            <li>Perfect park (centered + slow) stacks bonus · near-miss AI for points · touch pads on phone</li>
+            <li>Perfect park (centered + slow) stacks bonus · near-miss AI for points</li>
+          </ul>
+          <ul class="howto howto-mobile">
+            <li><strong>Left pads</strong> steer · <strong>Right pads</strong> Gas / Brake / Handbrake</li>
+            <li>Hold Gas + steer together — multi-touch is supported</li>
+            <li>Drive onto the <strong>moving trailer</strong> and stay parked ~1.5s to score</li>
+            <li>Perfect park (centered + slow) stacks bonus · skim AI for near-miss points</li>
+            <li>Landscape works best on phones · tap Start to unlock sound</li>
           </ul>
           <button id="btn-start" type="button">START ENGINE</button>
         </div>

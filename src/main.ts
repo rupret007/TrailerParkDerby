@@ -96,6 +96,64 @@ const boosts: BoostOrb[] = [
 
 bestEl.textContent = String(best)
 
+/** Solid play-mode detection: real phones/tablets get touch UI; desktop keeps keyboard. */
+function isIosLike(): boolean {
+  const ua = navigator.userAgent || ''
+  if (/iPhone|iPad|iPod/i.test(ua)) return true
+  // iPadOS desktop UA still has touch + Mac
+  return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1
+}
+
+function isMobilePlay(): boolean {
+  if (isIosLike()) return true
+  if (/Android|Mobile/i.test(navigator.userAgent || '')) return true
+  const coarse = window.matchMedia('(pointer: coarse)').matches
+  const fineHover = window.matchMedia('(hover: hover) and (pointer: fine)').matches
+  if (coarse && !fineHover) return true
+  if (navigator.maxTouchPoints > 0 && window.matchMedia('(max-width: 900px)').matches && !fineHover) {
+    return true
+  }
+  return false
+}
+
+function isLandscape(): boolean {
+  return window.matchMedia('(orientation: landscape)').matches || window.innerWidth > window.innerHeight
+}
+
+function applyPlayMode() {
+  const mobile = isMobilePlay()
+  document.body.classList.toggle('mode-mobile', mobile)
+  document.body.classList.toggle('mode-desktop', !mobile)
+  document.body.classList.toggle('landscape', isLandscape())
+
+  const pad = document.getElementById('touch-pad')
+  const orient = document.getElementById('orient-hint')
+  if (pad) {
+    if (mobile) {
+      pad.classList.remove('hidden')
+      pad.removeAttribute('hidden')
+    } else {
+      pad.classList.add('hidden')
+      pad.setAttribute('hidden', '')
+      // clear stuck touches when leaving mobile
+      touch.accel = touch.brake = touch.left = touch.right = touch.handbrake = false
+    }
+  }
+  if (orient) {
+    const showOrient = mobile && !isLandscape()
+    orient.classList.toggle('hidden', !showOrient)
+    if (showOrient) orient.removeAttribute('hidden')
+    else orient.setAttribute('hidden', '')
+  }
+  const hint = document.getElementById('hint')
+  if (hint) {
+    hint.textContent = mobile
+      ? 'Touch: steer left · Gas/Brake right · park ~1.5s'
+      : 'Park on the moving trailer · hold ~1.5s'
+  }
+}
+
+
 function makeAi(color: string, phase: number): Car {
   const p = pointOnTrack(phase)
   const t = tangentOnTrack(phase)
@@ -750,23 +808,50 @@ function bindTouchPad() {
   for (const [id, key] of Object.entries(map)) {
     const el = document.getElementById(id)
     if (!el) continue
-    const down = (e: Event) => {
-      e.preventDefault()
-      touch[key] = true
-      ensureAudio()
+    const set = (down: boolean, e?: Event) => {
+      if (e) e.preventDefault()
+      touch[key] = down
+      el.classList.toggle('is-down', down)
+      if (down) ensureAudio()
     }
-    const up = (e: Event) => {
+    el.addEventListener('pointerdown', (e) => {
       e.preventDefault()
-      touch[key] = false
-    }
-    el.addEventListener('pointerdown', down)
-    el.addEventListener('pointerup', up)
-    el.addEventListener('pointerleave', up)
-    el.addEventListener('pointercancel', up)
+      try {
+        el.setPointerCapture((e as PointerEvent).pointerId)
+      } catch {
+        /* ignore */
+      }
+      set(true, e)
+    })
+    el.addEventListener('pointerup', (e) => set(false, e))
+    el.addEventListener('pointercancel', (e) => set(false, e))
+    el.addEventListener('lostpointercapture', () => set(false))
+    // iOS Safari sometimes drops pointerup if we only listen leave
+    el.addEventListener('pointerleave', (e) => {
+      if ((e as PointerEvent).buttons === 0) set(false, e)
+    })
   }
 }
 
+function bindMobileChrome() {
+  applyPlayMode()
+  window.addEventListener('resize', applyPlayMode)
+  window.addEventListener('orientationchange', () => {
+    // iOS fires before dimensions settle
+    setTimeout(applyPlayMode, 250)
+  })
+  // First Start tap unlocks WebAudio on iOS
+  btnStart.addEventListener(
+    'touchend',
+    () => {
+      ensureAudio()
+    },
+    { passive: true },
+  )
+}
+
 bindTouchPad()
+bindMobileChrome()
 
 placeBoosts()
 lastTs = performance.now()
