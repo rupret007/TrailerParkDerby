@@ -994,6 +994,7 @@ function bindTouchPad() {
   // Stop iOS from scrolling/zooming while thumbs are on pads
   const padRoot = document.getElementById('touch-pad')
   if (padRoot) {
+    padRoot.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false })
     padRoot.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false })
   }
 
@@ -1040,6 +1041,12 @@ function bindMobileChrome() {
   if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', applyPlayMode)
   }
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      touch.accel = touch.brake = touch.left = touch.right = touch.handbrake = false
+      document.querySelectorAll('.pad.is-down').forEach((el) => el.classList.remove('is-down'))
+    }
+  })
   // First Start tap unlocks WebAudio on iOS
   btnStart.addEventListener(
     'touchend',
