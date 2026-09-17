@@ -91,6 +91,7 @@ interface Car {
   width: number
   length: number
   name?: string
+  kind?: 'sedan' | 'van'
 }
 
 interface BoostOrb {
@@ -126,28 +127,29 @@ let lastGasTap = 0
 const player: Car = {
   x: CX - TRACK.rx,
   y: CY,
-  angle: -Math.PI / 2,
+  angle: Math.PI / 2, // face clockwise travel on left straight (up → toward top when CW)
   speed: 0,
-  color: '#ff6b4a',
+  color: '#e8f0ff', // player: pale/silver distinct
   isPlayer: true,
   aiPhase: 0,
   width: 18,
-  length: 32,
+  length: 34,
+  kind: 'sedan',
 }
 
 const aiCars: Car[] = [
-  makeAi('#4ad0ff', 0.15, AI_NAMES[0]),
-  makeAi('#b07aff', 0.45, AI_NAMES[1]),
-  makeAi('#7aff9a', 0.75, AI_NAMES[2]),
-  makeAi('#ffd24a', 0.92, AI_NAMES[3]),
+  makeAi('#c42828', 0.15, AI_NAMES[0], 'sedan'), // red sedan
+  makeAi('#1a1a1e', 0.45, AI_NAMES[1], 'sedan'), // black car
+  makeAi('#e6c200', 0.75, AI_NAMES[2], 'van'), // yellow van
+  makeAi('#3d5c3a', 0.92, AI_NAMES[3], 'sedan'), // beat-up green
 ]
 
 const trailer = {
   progress: 0.05,
   speed: 0.09, // laps per second-ish along param
-  bedW: 52,
-  bedL: 90,
-  cabL: 28,
+  bedW: 54,
+  bedL: 100,
+  cabL: 38,
 }
 
 const boosts: BoostOrb[] = [
@@ -215,9 +217,15 @@ function applyPlayMode() {
 }
 
 
-function makeAi(color: string, phase: number, name = 'Rival'): Car {
+function makeAi(
+  color: string,
+  phase: number,
+  name = 'Rival',
+  kind: 'sedan' | 'van' = 'sedan',
+): Car {
   const p = pointOnTrack(phase)
   const tan = tangentOnTrack(phase)
+  const isVan = kind === 'van'
   return {
     x: p.x,
     y: p.y,
@@ -226,9 +234,10 @@ function makeAi(color: string, phase: number, name = 'Rival'): Car {
     color,
     isPlayer: false,
     aiPhase: phase,
-    width: 16,
-    length: 30,
+    width: isVan ? 20 : 16,
+    length: isVan ? 36 : 30,
     name,
+    kind,
   }
 }
 
@@ -248,22 +257,24 @@ function horn() {
   flash(pick(['HONK!', 'MOVE IT, EARL!', 'Coming through!', 'Watch the flamingos!']))
 }
 
+/** Clockwise oval: progress t increases → angle -t·2π (King of the Hill / right-hand turns). */
 function pointOnTrack(t: number): Vec {
-  const a = t * Math.PI * 2
+  const a = -t * Math.PI * 2
   return { x: CX + Math.cos(a) * TRACK.rx, y: CY + Math.sin(a) * TRACK.ry }
 }
 
 function tangentOnTrack(t: number): Vec {
-  const a = t * Math.PI * 2
-  // derivative of ellipse
-  const dx = -Math.sin(a) * TRACK.rx
-  const dy = Math.cos(a) * TRACK.ry
+  const a = -t * Math.PI * 2
+  // d/dt of pointOnTrack: da/dt = -2π
+  const dx = Math.sin(a) * TRACK.rx // * 2π cancelled in normalize
+  const dy = -Math.cos(a) * TRACK.ry
   const len = Math.hypot(dx, dy) || 1
   return { x: dx / len, y: dy / len }
 }
 
 function normalOnTrack(t: number): Vec {
   const tan = tangentOnTrack(t)
+  // inward-ish left-of-travel for clockwise (flip of CCW convention)
   return { x: -tan.y, y: tan.x }
 }
 
@@ -431,7 +442,8 @@ function updatePlayer(dt: number) {
 function softTrackPull(car: Car, dt: number, strength: number) {
   // Closest-ish phase via angle from center
   const ang = Math.atan2((car.y - CY) / TRACK.ry, (car.x - CX) / TRACK.rx)
-  const t = ((ang / (Math.PI * 2)) + 1) % 1
+  // geometric CCW angle → clockwise track param
+  const t = ((-ang / (Math.PI * 2)) + 1) % 1
   const center = pointOnTrack(t)
   const dist = Math.hypot(car.x - center.x, car.y - center.y)
   const limit = TRACK.halfWidth + 12
@@ -643,74 +655,260 @@ function updateParking(dt: number) {
   }
 }
 
+function asphaltNoise(seed: number): void {
+  // subtle asphalt speckles (deterministic-ish from seed)
+  ctx.save()
+  ctx.globalAlpha = neonNight ? 0.07 : 0.1
+  for (let i = 0; i < 180; i++) {
+    const u = ((seed * 1103515245 + i * 12345) >>> 0) % 1000 / 1000
+    const v = ((seed * 1664525 + i * 67890) >>> 0) % 1000 / 1000
+    const a = u * Math.PI * 2
+    const rr = TRACK.rx - TRACK.halfWidth + v * TRACK.halfWidth * 2
+    const x = CX + Math.cos(a) * rr * (0.92 + (i % 7) * 0.02)
+    const y = CY + Math.sin(a) * (rr * (TRACK.ry / TRACK.rx)) * (0.92 + (i % 5) * 0.02)
+    ctx.fillStyle = i % 3 === 0 ? '#000' : '#fff'
+    ctx.fillRect(x, y, 1.2, 1.2)
+  }
+  ctx.restore()
+}
+
 function drawTrack() {
-  // infield
-  ctx.fillStyle = neonNight ? '#0a1220' : '#1a3020'
+  // outer grass / grounds
+  const grassOut = neonNight ? '#0d1a12' : '#3d7a3a'
+  const grassIn = neonNight ? '#102418' : '#4a8f45'
+  const asphalt = neonNight ? '#1a1e26' : '#2c3038'
+  const asphaltHi = neonNight ? '#242a34' : '#3a3f48'
+  ctx.fillStyle = grassOut
   ctx.fillRect(0, 0, W, H)
 
-  // outer dirt
+  // sunny day sky-ish vignette at corners
+  if (!neonNight) {
+    const g = ctx.createRadialGradient(CX, CY, 120, CX, CY, 520)
+    g.addColorStop(0, 'rgba(255,245,200,0.12)')
+    g.addColorStop(1, 'rgba(80,140,200,0.18)')
+    ctx.fillStyle = g
+    ctx.fillRect(0, 0, W, H)
+  } else {
+    const g = ctx.createRadialGradient(CX, CY * 0.3, 40, CX, CY, 520)
+    g.addColorStop(0, 'rgba(20,40,80,0.55)')
+    g.addColorStop(1, 'rgba(0,0,0,0.35)')
+    ctx.fillStyle = g
+    ctx.fillRect(0, 0, W, H)
+  }
+
+  // outer apron / runoff grass ring
   ctx.beginPath()
-  ctx.ellipse(CX, CY, TRACK.rx + TRACK.halfWidth + 18, TRACK.ry + TRACK.halfWidth + 18, 0, 0, Math.PI * 2)
-  ctx.fillStyle = neonNight ? '#1a1420' : '#3a2a18'
+  ctx.ellipse(CX, CY, TRACK.rx + TRACK.halfWidth + 36, TRACK.ry + TRACK.halfWidth + 36, 0, 0, Math.PI * 2)
+  ctx.fillStyle = neonNight ? '#152216' : '#356b34'
   ctx.fill()
 
-  // asphalt ring
+  // dark asphalt oval (outer edge)
   ctx.beginPath()
-  ctx.ellipse(CX, CY, TRACK.rx + TRACK.halfWidth, TRACK.ry + TRACK.halfWidth, 0, 0, Math.PI * 2)
-  ctx.fillStyle = neonNight ? '#1c2438' : '#2a2e34'
+  ctx.ellipse(CX, CY, TRACK.rx + TRACK.halfWidth + 4, TRACK.ry + TRACK.halfWidth + 4, 0, 0, Math.PI * 2)
+  ctx.fillStyle = asphalt
   ctx.fill()
 
-  // infield hole
+  // slightly lighter racing surface
+  ctx.beginPath()
+  ctx.ellipse(CX, CY, TRACK.rx + TRACK.halfWidth - 2, TRACK.ry + TRACK.halfWidth - 2, 0, 0, Math.PI * 2)
+  ctx.fillStyle = asphaltHi
+  ctx.fill()
+
+  asphaltNoise(42)
+
+  // infield grass hole
   ctx.beginPath()
   ctx.ellipse(CX, CY, TRACK.rx - TRACK.halfWidth, TRACK.ry - TRACK.halfWidth, 0, 0, Math.PI * 2)
-  ctx.fillStyle = neonNight ? '#0c1828' : '#244028'
+  ctx.fillStyle = grassIn
   ctx.fill()
 
-  // lane dashes
-  ctx.strokeStyle = neonNight ? 'rgba(120,200,255,0.35)' : 'rgba(255,220,80,0.45)'
+  // soft infield shade
+  ctx.beginPath()
+  ctx.ellipse(CX, CY, (TRACK.rx - TRACK.halfWidth) * 0.72, (TRACK.ry - TRACK.halfWidth) * 0.72, 0, 0, Math.PI * 2)
+  ctx.fillStyle = neonNight ? 'rgba(0,0,0,0.18)' : 'rgba(255,255,200,0.08)'
+  ctx.fill()
+
+  // white concrete walls (inner + outer)
+  const wall = neonNight ? '#d8dee8' : '#f2f4f7'
+  ctx.strokeStyle = wall
+  ctx.lineWidth = 5
+  ctx.beginPath()
+  ctx.ellipse(CX, CY, TRACK.rx + TRACK.halfWidth + 1, TRACK.ry + TRACK.halfWidth + 1, 0, 0, Math.PI * 2)
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.ellipse(CX, CY, TRACK.rx - TRACK.halfWidth - 1, TRACK.ry - TRACK.halfWidth - 1, 0, 0, Math.PI * 2)
+  ctx.stroke()
+  // wall shadow lip
+  ctx.strokeStyle = neonNight ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.2)'
   ctx.lineWidth = 2
-  ctx.setLineDash([12, 14])
+  ctx.beginPath()
+  ctx.ellipse(CX, CY, TRACK.rx + TRACK.halfWidth - 3, TRACK.ry + TRACK.halfWidth - 3, 0, 0, Math.PI * 2)
+  ctx.stroke()
+
+  // lane markings (dashed centerline + outer guide)
+  ctx.strokeStyle = neonNight ? 'rgba(255,230,120,0.55)' : 'rgba(255,255,255,0.75)'
+  ctx.lineWidth = 2.5
+  ctx.setLineDash([14, 16])
   ctx.beginPath()
   ctx.ellipse(CX, CY, TRACK.rx, TRACK.ry, 0, 0, Math.PI * 2)
   ctx.stroke()
+  ctx.setLineDash([8, 18])
+  ctx.strokeStyle = neonNight ? 'rgba(200,210,230,0.25)' : 'rgba(255,255,255,0.35)'
+  ctx.lineWidth = 1.5
+  ctx.beginPath()
+  ctx.ellipse(CX, CY, TRACK.rx + TRACK.halfWidth * 0.45, TRACK.ry + TRACK.halfWidth * 0.45, 0, 0, Math.PI * 2)
+  ctx.stroke()
   ctx.setLineDash([])
 
-  // neon edge glow
+  // start/finish stripe across bottom-ish of oval (t≈0 right → CW)
+  ctx.save()
+  const sf = pointOnTrack(0)
+  const sft = tangentOnTrack(0)
+  ctx.translate(sf.x, sf.y)
+  ctx.rotate(Math.atan2(sft.y, sft.x))
+  for (let i = -4; i <= 4; i++) {
+    ctx.fillStyle = i % 2 === 0 ? '#fff' : '#111'
+    ctx.fillRect(-6, i * 8 - TRACK.halfWidth + 8, 12, 8)
+  }
+  ctx.restore()
+
   if (neonNight) {
-    ctx.strokeStyle = 'rgba(80,180,255,0.55)'
-    ctx.lineWidth = 3
+    ctx.strokeStyle = 'rgba(80,180,255,0.35)'
+    ctx.lineWidth = 2
     ctx.shadowColor = '#4ab0ff'
-    ctx.shadowBlur = 16
+    ctx.shadowBlur = 14
     ctx.beginPath()
-    ctx.ellipse(CX, CY, TRACK.rx + TRACK.halfWidth, TRACK.ry + TRACK.halfWidth, 0, 0, Math.PI * 2)
-    ctx.stroke()
-    ctx.beginPath()
-    ctx.ellipse(CX, CY, TRACK.rx - TRACK.halfWidth, TRACK.ry - TRACK.halfWidth, 0, 0, Math.PI * 2)
+    ctx.ellipse(CX, CY, TRACK.rx + TRACK.halfWidth + 1, TRACK.ry + TRACK.halfWidth + 1, 0, 0, Math.PI * 2)
     ctx.stroke()
     ctx.shadowBlur = 0
   }
 
-  // trailer park props in infield
   drawProps()
 }
 
+function drawTree(x: number, y: number, s: number) {
+  ctx.save()
+  ctx.translate(x, y)
+  ctx.fillStyle = neonNight ? '#1a1210' : '#3a2818'
+  ctx.fillRect(-2 * s, 0, 4 * s, 10 * s)
+  ctx.fillStyle = neonNight ? '#0e2214' : '#1f5a28'
+  ctx.beginPath()
+  ctx.arc(0, -2 * s, 10 * s, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.beginPath()
+  ctx.arc(-6 * s, 2 * s, 7 * s, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.beginPath()
+  ctx.arc(6 * s, 2 * s, 7 * s, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
+}
+
+function drawLightPole(x: number, y: number) {
+  ctx.save()
+  ctx.translate(x, y)
+  ctx.strokeStyle = neonNight ? '#9aa8b8' : '#6a7580'
+  ctx.lineWidth = 3
+  ctx.beginPath()
+  ctx.moveTo(0, 18)
+  ctx.lineTo(0, -28)
+  ctx.stroke()
+  ctx.strokeStyle = neonNight ? '#c0cad4' : '#889'
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.moveTo(0, -28)
+  ctx.lineTo(14, -34)
+  ctx.stroke()
+  if (neonNight) {
+    ctx.fillStyle = 'rgba(255,240,180,0.85)'
+    ctx.shadowColor = '#ffe8a0'
+    ctx.shadowBlur = 22
+    ctx.beginPath()
+    ctx.arc(14, -34, 5, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.shadowBlur = 0
+    const glow = ctx.createRadialGradient(14, -34, 2, 14, -10, 50)
+    glow.addColorStop(0, 'rgba(255,230,150,0.28)')
+    glow.addColorStop(1, 'rgba(255,230,150,0)')
+    ctx.fillStyle = glow
+    ctx.beginPath()
+    ctx.arc(14, -10, 50, 0, Math.PI * 2)
+    ctx.fill()
+  } else {
+    ctx.fillStyle = '#ddd'
+    ctx.beginPath()
+    ctx.arc(14, -34, 4, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  ctx.restore()
+}
+
+function drawBleachers(x: number, y: number, w: number, rows: number, ang: number) {
+  ctx.save()
+  ctx.translate(x, y)
+  ctx.rotate(ang)
+  for (let r = 0; r < rows; r++) {
+    const yy = r * 7
+    ctx.fillStyle = neonNight ? `rgba(60,70,90,${0.55 + r * 0.08})` : `rgba(120,110,100,${0.55 + r * 0.08})`
+    ctx.fillRect(-w / 2, -yy, w, 6)
+    // crowd dots
+    for (let i = 0; i < Math.floor(w / 6); i++) {
+      if ((i + r) % 3 === 0) continue
+      ctx.fillStyle = neonNight
+        ? `hsl(${(i * 47 + r * 19) % 360},40%,${45 + (i % 3) * 10}%)`
+        : `hsl(${(i * 47 + r * 19) % 360},35%,${30 + (i % 4) * 8}%)`
+      ctx.beginPath()
+      ctx.arc(-w / 2 + 4 + i * 6, -yy + 2, 1.6, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+  ctx.restore()
+}
+
 function drawProps() {
+  // Trees outside oval
+  const trees = [
+    [70, 70, 1.1],
+    [110, H - 80, 0.9],
+    [W - 90, 90, 1.2],
+    [W - 70, H - 100, 1.0],
+    [40, CY, 0.85],
+    [W - 45, CY + 40, 1.05],
+    [CX - 200, 40, 0.7],
+    [CX + 210, H - 50, 0.8],
+  ] as const
+  for (const [x, y, s] of trees) drawTree(x, y, s)
+
+  // Stadium lights
+  drawLightPole(CX - 300, 55)
+  drawLightPole(CX + 300, 55)
+  drawLightPole(CX - 300, H - 55)
+  drawLightPole(CX + 300, H - 55)
+  drawLightPole(60, CY - 80)
+  drawLightPole(W - 60, CY - 80)
+
+  // Bleachers on north side
+  drawBleachers(CX, 48, 220, 4, 0)
+  drawBleachers(CX - 160, 70, 90, 3, -0.15)
+  drawBleachers(CX + 160, 70, 90, 3, 0.15)
+
+  // Infield trailer-park leftovers (smaller, keep vibe)
   const trailers = [
-    { x: CX - 40, y: CY - 20, a: 0.3, c: '#6a7a90' },
-    { x: CX + 50, y: CY + 10, a: -0.5, c: '#8a6a50' },
-    { x: CX - 10, y: CY + 40, a: 1.1, c: '#5a8a6a' },
+    { x: CX - 36, y: CY - 16, a: 0.25, c: '#7a8696' },
+    { x: CX + 44, y: CY + 14, a: -0.4, c: '#8a6a50' },
   ]
   for (const tr of trailers) {
     ctx.save()
     ctx.translate(tr.x, tr.y)
     ctx.rotate(tr.a)
     ctx.fillStyle = tr.c
-    ctx.fillRect(-28, -10, 56, 20)
+    ctx.fillRect(-22, -8, 44, 16)
     ctx.fillStyle = neonNight ? '#ffd080' : '#fff2c0'
-    ctx.fillRect(-20, -6, 8, 6)
-    ctx.fillRect(4, -6, 8, 6)
+    ctx.fillRect(-14, -5, 6, 5)
+    ctx.fillRect(4, -5, 6, 5)
     ctx.restore()
   }
+
   // Plastic flamingos
   const birds = [
     { x: CX - 70, y: CY + 8 },
@@ -734,6 +932,7 @@ function drawProps() {
     ctx.fillRect(5, -2, 5, 2)
     ctx.restore()
   }
+
   // Satellite dish
   ctx.save()
   ctx.translate(CX - 5, CY - 55)
@@ -746,6 +945,19 @@ function drawProps() {
   ctx.fillStyle = '#445'
   ctx.fillRect(-1, 0, 2, 16)
   ctx.restore()
+
+  // infield "King of the Hill" plaque
+  ctx.save()
+  ctx.translate(CX, CY + 8)
+  ctx.fillStyle = neonNight ? 'rgba(20,30,40,0.65)' : 'rgba(255,255,255,0.45)'
+  roundRect(-48, -12, 96, 24, 4)
+  ctx.fill()
+  ctx.fillStyle = neonNight ? '#9ec8ff' : '#1a3a5c'
+  ctx.font = 'bold 11px sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('KING OF THE HILL', 0, 1)
+  ctx.restore()
 }
 
 function drawCar(car: Car) {
@@ -754,33 +966,213 @@ function drawCar(car: Car) {
     ctx.font = '10px sans-serif'
     ctx.textAlign = 'center'
     ctx.fillStyle = 'rgba(220,235,255,0.75)'
-    ctx.fillText(car.name, car.x, car.y - 22)
+    ctx.fillText(car.name, car.x, car.y - 24)
     ctx.restore()
   }
   ctx.save()
   ctx.translate(car.x, car.y)
   ctx.rotate(car.angle)
-  // body
+
+  const L = car.length
+  const Wd = car.width
+  const van = car.kind === 'van'
+
+  // wheels (motion slant)
+  const spin = (performance.now() / 40) % 6
+  ctx.fillStyle = '#0c0c0e'
+  const wheel = (wx: number, wy: number) => {
+    ctx.save()
+    ctx.translate(wx, wy)
+    ctx.rotate(0.08 * Math.sin(spin))
+    ctx.fillRect(-5, -2.5, 10, 5)
+    ctx.restore()
+  }
+  wheel(-L * 0.28, -Wd / 2 - 1)
+  wheel(-L * 0.28, Wd / 2 + 1)
+  wheel(L * 0.28, -Wd / 2 - 1)
+  wheel(L * 0.28, Wd / 2 + 1)
+
+  // body — sedan taper vs van box
   ctx.fillStyle = car.color
   if (neonNight) {
     ctx.shadowColor = car.color
-    ctx.shadowBlur = car.isPlayer ? 18 : 10
+    ctx.shadowBlur = car.isPlayer ? 16 : 8
   }
-  roundRect(-car.length / 2, -car.width / 2, car.length, car.width, 4)
+  ctx.beginPath()
+  if (van) {
+    // boxy van
+    roundRect(-L / 2, -Wd / 2, L, Wd, 3)
+  } else {
+    // sedan-ish silhouette
+    ctx.moveTo(-L / 2 + 2, -Wd / 2 + 2)
+    ctx.lineTo(L * 0.15, -Wd / 2)
+    ctx.lineTo(L / 2 - 1, -Wd / 2 + 3)
+    ctx.lineTo(L / 2, Wd / 2 - 3)
+    ctx.lineTo(L * 0.15, Wd / 2)
+    ctx.lineTo(-L / 2 + 2, Wd / 2 - 2)
+    ctx.closePath()
+  }
   ctx.fill()
   ctx.shadowBlur = 0
-  // windshield
-  ctx.fillStyle = neonNight ? '#c8f0ff' : '#a0d0e8'
-  ctx.fillRect(car.length * 0.05, -car.width * 0.32, car.length * 0.28, car.width * 0.64)
-  // lights
-  ctx.fillStyle = '#ffe080'
-  ctx.fillRect(car.length / 2 - 3, -car.width / 2 + 2, 4, 5)
-  ctx.fillRect(car.length / 2 - 3, car.width / 2 - 7, 4, 5)
-  if (car.isPlayer) {
-    ctx.strokeStyle = '#fff'
-    ctx.lineWidth = 1.5
-    ctx.strokeRect(-car.length / 2, -car.width / 2, car.length, car.width)
+
+  // roof / cabin
+  ctx.fillStyle = van
+    ? (neonNight ? 'rgba(0,0,0,0.22)' : 'rgba(0,0,0,0.18)')
+    : (neonNight ? 'rgba(0,0,0,0.28)' : 'rgba(0,0,0,0.2)')
+  if (van) {
+    roundRect(-L * 0.42, -Wd * 0.42, L * 0.72, Wd * 0.84, 2)
+    ctx.fill()
+  } else {
+    roundRect(-L * 0.18, -Wd * 0.38, L * 0.42, Wd * 0.76, 2)
+    ctx.fill()
   }
+
+  // windshield
+  ctx.fillStyle = neonNight ? 'rgba(180,220,255,0.85)' : 'rgba(140,190,220,0.9)'
+  if (van) {
+    ctx.fillRect(L * 0.22, -Wd * 0.34, L * 0.16, Wd * 0.68)
+  } else {
+    ctx.beginPath()
+    ctx.moveTo(L * 0.08, -Wd * 0.32)
+    ctx.lineTo(L * 0.28, -Wd * 0.28)
+    ctx.lineTo(L * 0.28, Wd * 0.28)
+    ctx.lineTo(L * 0.08, Wd * 0.32)
+    ctx.closePath()
+    ctx.fill()
+  }
+
+  // rear window
+  ctx.fillStyle = neonNight ? 'rgba(120,150,180,0.55)' : 'rgba(100,130,160,0.55)'
+  ctx.fillRect(-L * 0.42, -Wd * 0.28, L * 0.14, Wd * 0.56)
+
+  // headlights / taillights
+  ctx.fillStyle = '#ffe9a0'
+  ctx.fillRect(L / 2 - 3, -Wd / 2 + 2, 3, 4)
+  ctx.fillRect(L / 2 - 3, Wd / 2 - 6, 3, 4)
+  ctx.fillStyle = '#ff4040'
+  ctx.fillRect(-L / 2, -Wd / 2 + 2, 3, 4)
+  ctx.fillRect(-L / 2, Wd / 2 - 6, 3, 4)
+
+  // wear marks
+  ctx.strokeStyle = 'rgba(0,0,0,0.25)'
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  ctx.moveTo(-L * 0.1, -Wd * 0.2)
+  ctx.lineTo(L * 0.05, -Wd * 0.15)
+  ctx.stroke()
+
+  if (car.isPlayer) {
+    ctx.strokeStyle = neonNight ? '#fff' : '#1a3a6a'
+    ctx.lineWidth = 2
+    ctx.strokeRect(-L / 2, -Wd / 2, L, Wd)
+    // roof stripe
+    ctx.fillStyle = neonNight ? '#4af' : '#246'
+    ctx.fillRect(-L * 0.05, -2, L * 0.22, 4)
+  }
+
+  ctx.restore()
+}
+
+function drawTrailer() {
+  const pose = trailerPose()
+  ctx.save()
+  ctx.translate(pose.x, pose.y)
+  ctx.rotate(pose.angle)
+
+  const bedX = -trailer.cabL * 0.12 - trailer.bedL
+
+  // hitch
+  ctx.fillStyle = '#666'
+  ctx.fillRect(-6, -3, 10, 6)
+  ctx.strokeStyle = '#333'
+  ctx.lineWidth = 1.5
+  ctx.beginPath()
+  ctx.arc(2, 0, 4, 0, Math.PI * 2)
+  ctx.stroke()
+
+  // flatbed (empty) — steel gray deck
+  ctx.fillStyle = neonNight ? '#5a6068' : '#6a7078'
+  if (neonNight) {
+    ctx.shadowColor = '#8899aa'
+    ctx.shadowBlur = 10
+  }
+  ctx.fillRect(bedX, -trailer.bedW / 2, trailer.bedL, trailer.bedW)
+  ctx.shadowBlur = 0
+  // deck planks
+  ctx.strokeStyle = 'rgba(0,0,0,0.2)'
+  ctx.lineWidth = 1
+  for (let i = 1; i < 6; i++) {
+    const px = bedX + (trailer.bedL * i) / 6
+    ctx.beginPath()
+    ctx.moveTo(px, -trailer.bedW / 2 + 2)
+    ctx.lineTo(px, trailer.bedW / 2 - 2)
+    ctx.stroke()
+  }
+  // rails
+  ctx.strokeStyle = neonNight ? '#c8d0d8' : '#d8e0e8'
+  ctx.lineWidth = 2.5
+  ctx.strokeRect(bedX + 2, -trailer.bedW / 2 + 2, trailer.bedL - 4, trailer.bedW - 4)
+
+  // target chevrons on empty bed
+  ctx.fillStyle = 'rgba(255,210,60,0.45)'
+  for (let i = 0; i < 4; i++) {
+    const cx = bedX + 16 + i * 20
+    ctx.beginPath()
+    ctx.moveTo(cx, 0)
+    ctx.lineTo(cx - 9, -11)
+    ctx.lineTo(cx - 9, 11)
+    ctx.closePath()
+    ctx.fill()
+  }
+  // center target ring
+  ctx.strokeStyle = 'rgba(255,80,80,0.55)'
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.arc(bedX + trailer.bedL * 0.55, 0, 10, 0, Math.PI * 2)
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.arc(bedX + trailer.bedL * 0.55, 0, 4, 0, Math.PI * 2)
+  ctx.stroke()
+
+  // white cab (tow truck)
+  ctx.fillStyle = neonNight ? '#eef2f6' : '#f5f7fa'
+  if (neonNight) {
+    ctx.shadowColor = '#ffffff'
+    ctx.shadowBlur = 12
+  }
+  roundRect(-2, -17, trailer.cabL, 34, 5)
+  ctx.fill()
+  ctx.shadowBlur = 0
+
+  // checkered pattern on cab side
+  const cell = 5
+  for (let row = 0; row < 5; row++) {
+    for (let col = 0; col < 4; col++) {
+      if ((row + col) % 2 === 0) {
+        ctx.fillStyle = '#111'
+        ctx.fillRect(4 + col * cell, -12 + row * cell, cell, cell)
+      }
+    }
+  }
+
+  // windshield
+  ctx.fillStyle = neonNight ? '#7ec8ff' : '#5aa0c8'
+  ctx.fillRect(trailer.cabL * 0.55, -12, 12, 24)
+  // roof light bar
+  ctx.fillStyle = '#c62828'
+  ctx.fillRect(trailer.cabL * 0.2, -19, trailer.cabL * 0.45, 3)
+  ctx.fillStyle = '#f5d76e'
+  ctx.fillRect(trailer.cabL * 0.35, -19, 6, 3)
+
+  // wheels
+  ctx.fillStyle = '#111'
+  ctx.fillRect(6, -trailer.bedW / 2 - 5, 16, 7)
+  ctx.fillRect(6, trailer.bedW / 2 - 2, 16, 7)
+  ctx.fillRect(bedX + 14, -trailer.bedW / 2 - 5, 16, 7)
+  ctx.fillRect(bedX + 14, trailer.bedW / 2 - 2, 16, 7)
+  ctx.fillRect(bedX + trailer.bedL - 28, -trailer.bedW / 2 - 5, 16, 7)
+  ctx.fillRect(bedX + trailer.bedL - 28, trailer.bedW / 2 - 2, 16, 7)
+
   ctx.restore()
 }
 
@@ -792,59 +1184,6 @@ function roundRect(x: number, y: number, w: number, h: number, r: number) {
   ctx.arcTo(x, y + h, x, y, r)
   ctx.arcTo(x, y, x + w, y, r)
   ctx.closePath()
-}
-
-function drawTrailer() {
-  const pose = trailerPose()
-  ctx.save()
-  ctx.translate(pose.x, pose.y)
-  ctx.rotate(pose.angle)
-
-  // cab
-  ctx.fillStyle = neonNight ? '#3a8cff' : '#2a5a9a'
-  if (neonNight) {
-    ctx.shadowColor = '#4a9fff'
-    ctx.shadowBlur = 14
-  }
-  roundRect(-4, -16, trailer.cabL, 32, 5)
-  ctx.fill()
-  ctx.shadowBlur = 0
-  ctx.fillStyle = '#9ad8ff'
-  ctx.fillRect(trailer.cabL * 0.35, -10, 10, 20)
-
-  // flatbed
-  const bedX = -trailer.cabL * 0.15 - trailer.bedL
-  ctx.fillStyle = neonNight ? '#c45a20' : '#8a4010'
-  if (neonNight) {
-    ctx.shadowColor = '#ff8040'
-    ctx.shadowBlur = 12
-  }
-  ctx.fillRect(bedX, -trailer.bedW / 2, trailer.bedL, trailer.bedW)
-  ctx.shadowBlur = 0
-  // bed rails
-  ctx.strokeStyle = neonNight ? '#ffd090' : '#d0a060'
-  ctx.lineWidth = 2
-  ctx.strokeRect(bedX + 2, -trailer.bedW / 2 + 2, trailer.bedL - 4, trailer.bedW - 4)
-  // target chevrons
-  ctx.fillStyle = 'rgba(255,255,120,0.35)'
-  for (let i = 0; i < 3; i++) {
-    const cx = bedX + 18 + i * 22
-    ctx.beginPath()
-    ctx.moveTo(cx, 0)
-    ctx.lineTo(cx - 8, -10)
-    ctx.lineTo(cx - 8, 10)
-    ctx.closePath()
-    ctx.fill()
-  }
-
-  // wheels
-  ctx.fillStyle = '#111'
-  ctx.fillRect(-8, -trailer.bedW / 2 - 4, 14, 6)
-  ctx.fillRect(-8, trailer.bedW / 2 - 2, 14, 6)
-  ctx.fillRect(bedX + 10, -trailer.bedW / 2 - 4, 14, 6)
-  ctx.fillRect(bedX + 10, trailer.bedW / 2 - 2, 14, 6)
-
-  ctx.restore()
 }
 
 function drawBoosts(now: number) {
