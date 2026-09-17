@@ -23,6 +23,61 @@ const TRACK = {
 const HS_KEY = 'trailerParkDerby_highScore'
 const MUTE_KEY = 'trailerParkDerby_mute'
 
+const COMBO_TITLES = [
+  'Single-Wide',
+  'Double-Wide',
+  'Triple-Wide',
+  'Patio Set',
+  'Satellite King',
+  'Flamingo Lord',
+  'HOA Nightmare',
+  'Mobile Mansion',
+  'Trailer Royalty',
+]
+
+const PARK_LINES = [
+  'That’s a DOUBLE-WIDE PARK!',
+  'Your lawn chairs salute you!',
+  'HOA: reluctantly impressed.',
+  'Parked harder than Uncle Kevin’s truck.',
+  'Satellite dish has entered the chat.',
+  'Somebody call the county fair!',
+  'Grill still running. Respect.',
+]
+
+const PERFECT_LINES = [
+  'SURGICAL. Like parallel parking a burrito.',
+  'Centered like Grandma’s ceramic flamingos.',
+  'The flatbed blushed.',
+  'Perfect enough to make the neighbors mad.',
+  'That park had a warranty.',
+]
+
+const FAIL_LINES = [
+  'Fell off — the trailer filed a complaint.',
+  'Gravity: undefeated.',
+  'That’s going in the HOA newsletter.',
+  'Roadside assistance denied.',
+  'You parked… emotionally.',
+]
+
+const NEAR_LINES = [
+  'NEAR MISS — almost collected a cousin!',
+  'Skimmed ‘em like a bad rumor!',
+  'Paint traded. Feelings unchanged.',
+  'That was a courtesy bump in spirit only.',
+]
+
+const TAGLINES = [
+  'Oval night race · park the moving flatbed',
+  'Where the HOA fears to tread',
+  'Flamingos optional. Skill not.',
+  'Park it or explain it to the neighbors',
+  'Boost orbs: legally distinct from energy drinks',
+]
+
+const AI_NAMES = ['Cousin Ricky', 'Darlene', 'Big Earl', 'Miss Patty']
+
 type Vec = { x: number; y: number }
 
 interface Car {
@@ -35,6 +90,7 @@ interface Car {
   aiPhase: number
   width: number
   length: number
+  name?: string
 }
 
 interface BoostOrb {
@@ -62,6 +118,10 @@ let nearMissCd = 0
 type Spark = { x: number; y: number; vx: number; vy: number; life: number; color: string }
 const sparks: Spark[] = []
 const touch = { accel: false, brake: false, left: false, right: false, handbrake: false }
+let shakeT = 0
+let radioT = 8
+let hornCd = 0
+let lastGasTap = 0
 
 const player: Car = {
   x: CX - TRACK.rx,
@@ -76,9 +136,10 @@ const player: Car = {
 }
 
 const aiCars: Car[] = [
-  makeAi('#4ad0ff', 0.15),
-  makeAi('#b07aff', 0.45),
-  makeAi('#7aff9a', 0.75),
+  makeAi('#4ad0ff', 0.15, AI_NAMES[0]),
+  makeAi('#b07aff', 0.45, AI_NAMES[1]),
+  makeAi('#7aff9a', 0.75, AI_NAMES[2]),
+  makeAi('#ffd24a', 0.92, AI_NAMES[3]),
 ]
 
 const trailer = {
@@ -154,20 +215,37 @@ function applyPlayMode() {
 }
 
 
-function makeAi(color: string, phase: number): Car {
+function makeAi(color: string, phase: number, name = 'Rival'): Car {
   const p = pointOnTrack(phase)
-  const t = tangentOnTrack(phase)
+  const tan = tangentOnTrack(phase)
   return {
     x: p.x,
     y: p.y,
-    angle: Math.atan2(t.y, t.x),
+    angle: Math.atan2(tan.y, tan.x),
     speed: 140 + phase * 40,
     color,
     isPlayer: false,
     aiPhase: phase,
     width: 16,
     length: 30,
+    name,
   }
+}
+
+function pick<T>(arr: T[]): T {
+  return arr[(Math.random() * arr.length) | 0]
+}
+
+function comboTitle(c: number): string {
+  return COMBO_TITLES[Math.min(COMBO_TITLES.length - 1, Math.max(0, c - 1))]
+}
+
+function horn() {
+  if (hornCd > 0) return
+  hornCd = 0.35
+  beep(180, 0.12, 'sawtooth', 0.05)
+  beep(140, 0.18, 'sawtooth', 0.04)
+  flash(pick(['HONK!', 'MOVE IT, EARL!', 'Coming through!', 'Watch the flamingos!']))
 }
 
 function pointOnTrack(t: number): Vec {
@@ -213,9 +291,13 @@ function beep(freq: number, dur = 0.08, type: OscillatorType = 'square', gain = 
   osc.stop(t0 + dur)
 }
 
-function flash(msg: string) {
+function flash(msg: string, hold = 2.1) {
   message = msg
-  messageT = 1.6
+  messageT = hold
+}
+
+function shake(amount = 0.35) {
+  shakeT = Math.max(shakeT, amount)
 }
 
 function resetPlayerNearStart() {
@@ -250,6 +332,9 @@ function startGame() {
   perfectStreak = 0
   nearMissCd = 0
   sparks.length = 0
+  shakeT = 0
+  radioT = 6 + Math.random() * 4
+  hornCd = 0
   trailer.progress = 0.05
   placeBoosts()
   resetPlayerNearStart()
@@ -258,6 +343,7 @@ function startGame() {
   ensureAudio()
   beep(440, 0.1, 'triangle', 0.05)
   beep(660, 0.12, 'triangle', 0.04)
+  flash(pick(['Engines warm. Flamingos nervous.', 'Flatbed’s moving — don’t embarrass the county.', 'Go park something ridiculous.']), 2.0)
   lastTs = performance.now()
   requestAnimationFrame(frame)
 }
@@ -276,9 +362,12 @@ window.addEventListener('keydown', (e) => {
     localStorage.setItem(MUTE_KEY, muted ? '1' : '0')
     flash(muted ? 'Muted' : 'Sound on')
   }
+  if (e.code === 'KeyH' && running) {
+    horn()
+  }
   if (e.code === 'KeyR' && running) {
     resetPlayerNearStart()
-    flash('Retry')
+    flash(pick(['Retry — pride intact', 'Retry — flamingos judging', 'Retry — HOA watching']))
     beep(220, 0.1)
   }
 })
@@ -436,12 +525,53 @@ function updateNearMiss(dt: number) {
         localStorage.setItem(HS_KEY, String(best))
         bestEl.textContent = String(best)
       }
-      flash(`NEAR MISS +${bonus}`)
+      const who = c.name || 'a rival'
+      flash(`${pick(NEAR_LINES)} (${who}) +${bonus}`)
       beep(990, 0.05, 'square', 0.03)
       nearMissCd = 1.1
       break
     }
   }
+}
+
+function updateBumps(dt: number) {
+  hornCd = Math.max(0, hornCd - dt)
+  for (const c of aiCars) {
+    const d = Math.hypot(c.x - player.x, c.y - player.y)
+    if (d < 26) {
+      // soft shove
+      const ang = Math.atan2(player.y - c.y, player.x - c.x)
+      player.x += Math.cos(ang) * 40 * dt
+      player.y += Math.sin(ang) * 40 * dt
+      player.speed *= 0.92
+      shake(0.28)
+      if (nearMissCd <= 0.05) {
+        flash(`Bonked ${c.name || 'somebody'} — no insurance claims`)
+        beep(90, 0.1, 'square', 0.045)
+        nearMissCd = 0.7
+      }
+    }
+  }
+}
+
+function updateRadio(dt: number) {
+  if (!running) return
+  radioT -= dt
+  if (radioT > 0) return
+  radioT = 10 + Math.random() * 14
+  if (messageT > 0.4) return
+  flash(
+    pick([
+      'RADIO: “Keep the flamingos upright.”',
+      'RADIO: “Trailer’s moving. You heard me.”',
+      'RADIO: “Boost orbs are not snacks.”',
+      'RADIO: “Darlene says hi. Aggressively.”',
+      'RADIO: “Park pretty or park twice.”',
+    ]),
+    2.0,
+  )
+  beep(520, 0.04, 'triangle', 0.02)
+  beep(780, 0.05, 'triangle', 0.02)
 }
 
 function updateParking(dt: number) {
@@ -478,13 +608,16 @@ function updateParking(dt: number) {
       scoreEl.textContent = String(score)
       comboEl.textContent = String(combo)
       spawnParkSparks(perfect)
+      const title = comboTitle(combo)
+      const line = perfect ? pick(PERFECT_LINES) : pick(PARK_LINES)
+      const head = perfect ? `PERFECT x${perfectStreak}` : 'PARKED'
       if (score > best) {
         best = score
         localStorage.setItem(HS_KEY, String(best))
         bestEl.textContent = String(best)
-        flash(perfect ? `PERFECT x${perfectStreak}! +${gained} NEW BEST` : `PARKED! +${gained} NEW BEST`)
+        flash(`${head} · ${title} +${gained} NEW BEST — ${line}`, 2.6)
       } else {
-        flash(perfect ? `PERFECT x${perfectStreak}! +${gained}` : `PARKED! +${gained}`)
+        flash(`${head} · ${title} +${gained} — ${line}`, 2.4)
       }
       beep(523, 0.09, 'triangle', 0.05)
       beep(659, 0.09, 'triangle', 0.05)
@@ -502,7 +635,7 @@ function updateParking(dt: number) {
         combo = 1
         perfectStreak = 0
         comboEl.textContent = '1'
-        flash('Fell off — retry')
+        flash(pick(FAIL_LINES))
         beep(180, 0.15, 'square', 0.04)
       }
     }
@@ -567,20 +700,63 @@ function drawProps() {
     { x: CX + 50, y: CY + 10, a: -0.5, c: '#8a6a50' },
     { x: CX - 10, y: CY + 40, a: 1.1, c: '#5a8a6a' },
   ]
-  for (const t of trailers) {
+  for (const tr of trailers) {
     ctx.save()
-    ctx.translate(t.x, t.y)
-    ctx.rotate(t.a)
-    ctx.fillStyle = t.c
+    ctx.translate(tr.x, tr.y)
+    ctx.rotate(tr.a)
+    ctx.fillStyle = tr.c
     ctx.fillRect(-28, -10, 56, 20)
     ctx.fillStyle = neonNight ? '#ffd080' : '#fff2c0'
     ctx.fillRect(-20, -6, 8, 6)
     ctx.fillRect(4, -6, 8, 6)
     ctx.restore()
   }
+  // Plastic flamingos
+  const birds = [
+    { x: CX - 70, y: CY + 8 },
+    { x: CX + 78, y: CY - 30 },
+    { x: CX + 20, y: CY + 55 },
+  ]
+  for (const b of birds) {
+    ctx.save()
+    ctx.translate(b.x, b.y)
+    ctx.fillStyle = '#ff4fa3'
+    ctx.beginPath()
+    ctx.ellipse(0, 0, 7, 4, -0.4, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.strokeStyle = '#ff4fa3'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(-2, 2)
+    ctx.quadraticCurveTo(-6, 14, -1, 18)
+    ctx.stroke()
+    ctx.fillStyle = '#ffb020'
+    ctx.fillRect(5, -2, 5, 2)
+    ctx.restore()
+  }
+  // Satellite dish
+  ctx.save()
+  ctx.translate(CX - 5, CY - 55)
+  ctx.fillStyle = neonNight ? '#9ab0c8' : '#708090'
+  ctx.beginPath()
+  ctx.arc(0, 0, 12, Math.PI * 0.15, Math.PI * 1.1)
+  ctx.strokeStyle = neonNight ? '#c8e0ff' : '#606870'
+  ctx.lineWidth = 3
+  ctx.stroke()
+  ctx.fillStyle = '#445'
+  ctx.fillRect(-1, 0, 2, 16)
+  ctx.restore()
 }
 
 function drawCar(car: Car) {
+  if (!car.isPlayer && car.name) {
+    ctx.save()
+    ctx.font = '10px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.fillStyle = 'rgba(220,235,255,0.75)'
+    ctx.fillText(car.name, car.x, car.y - 22)
+    ctx.restore()
+  }
   ctx.save()
   ctx.translate(car.x, car.y)
   ctx.rotate(car.angle)
@@ -745,6 +921,7 @@ function drawHudOverlay() {
     neonNight ? 'NEON' : 'DAY',
     muted ? 'MUTE' : 'SFX',
     performance.now() < boostUntil ? 'BOOST' : '',
+    running ? comboTitle(combo) : '',
   ].filter(Boolean)
   ctx.fillText(bits.join(' · '), 16, H - 14)
 }
@@ -760,15 +937,24 @@ function frame(ts: number) {
   updateBoosts(ts)
   updateParking(dt)
   updateNearMiss(dt)
+  updateBumps(dt)
+  updateRadio(dt)
   updateSparks(dt)
+  if (shakeT > 0) shakeT = Math.max(0, shakeT - dt)
   if (messageT > 0) messageT -= dt
 
+  ctx.save()
+  if (shakeT > 0) {
+    const mag = shakeT * 10
+    ctx.translate((Math.random() - 0.5) * mag, (Math.random() - 0.5) * mag)
+  }
   drawTrack()
   drawTrailer()
   drawBoosts(ts)
   for (const c of aiCars) drawCar(c)
   drawCar(player)
   drawSparks()
+  ctx.restore()
   drawHudOverlay()
 
   requestAnimationFrame(frame)
@@ -805,6 +991,12 @@ function bindTouchPad() {
     'pad-right': 'right',
     'pad-hb': 'handbrake',
   }
+  // Stop iOS from scrolling/zooming while thumbs are on pads
+  const padRoot = document.getElementById('touch-pad')
+  if (padRoot) {
+    padRoot.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false })
+  }
+
   for (const [id, key] of Object.entries(map)) {
     const el = document.getElementById(id)
     if (!el) continue
@@ -820,6 +1012,11 @@ function bindTouchPad() {
         el.setPointerCapture((e as PointerEvent).pointerId)
       } catch {
         /* ignore */
+      }
+      if (key === 'accel') {
+        const now = performance.now()
+        if (now - lastGasTap < 320) horn()
+        lastGasTap = now
       }
       set(true, e)
     })
@@ -840,6 +1037,9 @@ function bindMobileChrome() {
     // iOS fires before dimensions settle
     setTimeout(applyPlayMode, 250)
   })
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', applyPlayMode)
+  }
   // First Start tap unlocks WebAudio on iOS
   btnStart.addEventListener(
     'touchend',
@@ -852,6 +1052,16 @@ function bindMobileChrome() {
 
 bindTouchPad()
 bindMobileChrome()
+
+function rotateTagline() {
+  const el = document.getElementById('tagline')
+  if (!el) return
+  el.textContent = pick(TAGLINES)
+  setInterval(() => {
+    el.textContent = pick(TAGLINES)
+  }, 4200)
+}
+rotateTagline()
 
 placeBoosts()
 lastTs = performance.now()

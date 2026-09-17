@@ -64,3 +64,9 @@ Vite + vanilla TypeScript.
 - **Near miss:** skim AI traffic for combo-scaled points
 - **Touch pads:** on-screen controls for phone/tablet
 - Park spark bursts (gold on perfect)
+
+## Flavor
+- Announcer one-liners on park / fail / near-miss
+- Combo titles: Single-Wide → Trailer Royalty
+- Named rivals, flamingos, satellite dish, radio chatter
+- Horn: `H` on desktop, double-tap Gas on phone
