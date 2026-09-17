@@ -27,6 +27,11 @@ body {
 }
 
 #game {
+  width: min(100vw, 960px);
+  height: auto;
+  max-height: min(100dvh, 640px);
+  object-fit: contain;
+
   display: block;
   max-width: 100%;
   height: auto;
@@ -145,3 +150,44 @@ kbd {
 }
 .pad:active { background: rgba(60,120,200,0.55); }
 .pad-wide { grid-column: span 1; font-size: 14px; letter-spacing: 0.04em; }
+
+/* Phone / other-machine: fill viewport, keep aspect */
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #060a12;
+  overscroll-behavior: none;
+  touch-action: none;
+}
+#app {
+  position: relative;
+  width: 100vw;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+#game {
+  width: min(100vw, calc(100dvh * 960 / 640));
+  height: auto;
+  max-height: 100dvh;
+  display: block;
+}
+#hud {
+  position: absolute;
+  top: max(8px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(92vw, 920px);
+  z-index: 4;
+  pointer-events: none;
+  text-align: center;
+}
+#touch-pad {
+  bottom: max(12px, env(safe-area-inset-bottom));
+}
+@media (pointer: coarse) {
+  #hint { font-size: 12px; opacity: 0.85; }
+  .overlay .panel { max-width: 92vw; max-height: 88dvh; overflow: auto; }
+}

@@ -1,5 +1,13 @@
 # TrailerParkDerby
 
+## Play online
+
+**Live:** https://rupret007.github.io/TrailerParkDerby/
+
+Works on other computers and phones (HTTPS). On a phone, use the on-screen pads; rotate to landscape if the track feels tight.
+
+Local: `npm install && npm run dev` → http://127.0.0.1:5173/
+
 Top-down oval arcade racer: circulate with AI traffic and **park on a moving flatbed trailer**.
 
 ## Play
