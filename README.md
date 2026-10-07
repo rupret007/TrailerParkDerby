@@ -14,6 +14,7 @@ Top-down oval arcade racer: circulate with AI traffic and **park on a moving fla
 
 ```bash
 npm i
+npm test
 npm run dev
 ```
 

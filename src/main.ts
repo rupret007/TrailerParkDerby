@@ -1,39 +1,59 @@
 import './style.css'
+import {
+  applySoftTrackPull,
+  clampDt,
+  collectBoost,
+  comboTitle,
+  createTrackGeom,
+  decayParkTimer,
+  evaluatePark,
+  finitePose,
+  isBump,
+  isNearMiss,
+  isParkHoldReady,
+  nearMissBonus,
+  normalOnTrack as normalOnTrackAt,
+  PARK_HOLD_SEC,
+  parseStoredInt,
+  PLAYER_SPAWN_LANE,
+  PLAYER_SPAWN_PHASE,
+  SPAWN_PROTECT_SEC,
+  phaseAfterBlur,
+  phaseAfterHidden,
+  pointInTrailerBed as pointInTrailerBedAt,
+  pointOnTrack as pointOnTrackAt,
+  shouldResetComboOnMiss,
+  stepPlayer,
+  stepTrailerProgress,
+  tangentOnTrack as tangentOnTrackAt,
+  tickBoostRemain,
+  tickOrbRespawn,
+  TRACK,
+  type RunPhase,
+} from './gameLogic'
 
 const canvas = document.getElementById('game') as HTMLCanvasElement
 const ctx = canvas.getContext('2d')!
 const overlay = document.getElementById('overlay') as HTMLDivElement
+const pauseOverlay = document.getElementById('pause-overlay') as HTMLDivElement
 const btnStart = document.getElementById('btn-start') as HTMLButtonElement
+const btnResume = document.getElementById('btn-resume') as HTMLButtonElement
+const btnRestart = document.getElementById('btn-restart') as HTMLButtonElement
+const btnPause = document.getElementById('btn-pause') as HTMLButtonElement
+const btnMute = document.getElementById('btn-mute') as HTMLButtonElement
 const scoreEl = document.getElementById('score') as HTMLSpanElement
 const comboEl = document.getElementById('combo') as HTMLSpanElement
 const bestEl = document.getElementById('best') as HTMLSpanElement
+const announceEl = document.getElementById('announce')
 
 const W = canvas.width
 const H = canvas.height
 const CX = W / 2
 const CY = H / 2
-
-/** Oval track geometry (centerline + half-widths) */
-const TRACK = {
-  rx: 340,
-  ry: 210,
-  halfWidth: 58,
-}
+const geom = createTrackGeom(CX, CY)
 
 const HS_KEY = 'trailerParkDerby_highScore'
 const MUTE_KEY = 'trailerParkDerby_mute'
-
-const COMBO_TITLES = [
-  'Single-Wide',
-  'Double-Wide',
-  'Triple-Wide',
-  'Patio Set',
-  'Satellite King',
-  'Flamingo Lord',
-  'HOA Nightmare',
-  'Mobile Mansion',
-  'Trailer Royalty',
-]
 
 const PARK_LINES = [
   'That’s a DOUBLE-WIDE PARK!',
@@ -78,8 +98,6 @@ const TAGLINES = [
 
 const AI_NAMES = ['Cousin Ricky', 'Darlene', 'Big Earl', 'Miss Patty']
 
-type Vec = { x: number; y: number }
-
 interface Car {
   x: number
   y: number
@@ -98,24 +116,29 @@ interface BoostOrb {
   x: number
   y: number
   alive: boolean
-  respawnAt: number
+  respawnIn: number
 }
 
 const keys = new Set<string>()
-let running = false
+let phase: RunPhase = 'title'
 let muted = localStorage.getItem(MUTE_KEY) === '1'
 let neonNight = true
 let score = 0
 let combo = 1
-let best = Number(localStorage.getItem(HS_KEY) || '0')
+let best = parseStoredInt(localStorage.getItem(HS_KEY))
 let parkTimer = 0
 let message = ''
 let messageT = 0
-let boostUntil = 0
+let boostRemain = 0
 let lastTs = 0
 let audioCtx: AudioContext | null = null
 let perfectStreak = 0
 let nearMissCd = 0
+const motionMq = window.matchMedia('(prefers-reduced-motion: reduce)')
+let reduceMotion = motionMq.matches
+motionMq.addEventListener('change', () => {
+  reduceMotion = motionMq.matches
+})
 type Spark = { x: number; y: number; vx: number; vy: number; life: number; color: string }
 const sparks: Spark[] = []
 const touch = { accel: false, brake: false, left: false, right: false, handbrake: false }
@@ -153,8 +176,8 @@ const trailer = {
 }
 
 const boosts: BoostOrb[] = [
-  { x: 0, y: 0, alive: true, respawnAt: 0 },
-  { x: 0, y: 0, alive: true, respawnAt: 0 },
+  { x: 0, y: 0, alive: true, respawnIn: 0 },
+  { x: 0, y: 0, alive: true, respawnIn: 0 },
 ]
 
 bestEl.textContent = String(best)
@@ -192,13 +215,13 @@ function applyPlayMode() {
   const pad = document.getElementById('touch-pad')
   const orient = document.getElementById('orient-hint')
   if (pad) {
-    if (mobile) {
+    const showPads = mobile && phase === 'playing'
+    if (showPads) {
       pad.classList.remove('hidden')
       pad.removeAttribute('hidden')
     } else {
       pad.classList.add('hidden')
       pad.setAttribute('hidden', '')
-      // clear stuck touches when leaving mobile
       touch.accel = touch.brake = touch.left = touch.right = touch.handbrake = false
     }
   }
@@ -245,10 +268,6 @@ function pick<T>(arr: T[]): T {
   return arr[(Math.random() * arr.length) | 0]
 }
 
-function comboTitle(c: number): string {
-  return COMBO_TITLES[Math.min(COMBO_TITLES.length - 1, Math.max(0, c - 1))]
-}
-
 function horn() {
   if (hornCd > 0) return
   hornCd = 0.35
@@ -257,69 +276,98 @@ function horn() {
   flash(pick(['HONK!', 'MOVE IT, EARL!', 'Coming through!', 'Watch the flamingos!']))
 }
 
-/** Clockwise oval: progress t increases → angle -t·2π (King of the Hill / right-hand turns). */
-function pointOnTrack(t: number): Vec {
-  const a = -t * Math.PI * 2
-  return { x: CX + Math.cos(a) * TRACK.rx, y: CY + Math.sin(a) * TRACK.ry }
+function pointOnTrack(t: number) {
+  return pointOnTrackAt(t, geom)
 }
 
-function tangentOnTrack(t: number): Vec {
-  const a = -t * Math.PI * 2
-  // d/dt of pointOnTrack: da/dt = -2π
-  const dx = Math.sin(a) * TRACK.rx // * 2π cancelled in normalize
-  const dy = -Math.cos(a) * TRACK.ry
-  const len = Math.hypot(dx, dy) || 1
-  return { x: dx / len, y: dy / len }
+function tangentOnTrack(t: number) {
+  return tangentOnTrackAt(t, geom)
 }
 
-function normalOnTrack(t: number): Vec {
-  const tan = tangentOnTrack(t)
-  // inward-ish left-of-travel for clockwise (flip of CCW convention)
-  return { x: -tan.y, y: tan.x }
+function normalOnTrack(t: number) {
+  return normalOnTrackAt(t, geom)
+}
+
+function setOverlayHidden(el: HTMLElement, hidden: boolean) {
+  el.classList.toggle('hidden', hidden)
+  if (hidden) el.setAttribute('hidden', '')
+  else el.removeAttribute('hidden')
+}
+
+function syncChrome() {
+  if (btnPause) {
+    const show = phase === 'playing' || phase === 'paused'
+    btnPause.hidden = !show
+    btnPause.setAttribute('aria-hidden', show ? 'false' : 'true')
+    btnPause.textContent = phase === 'paused' ? 'Resume' : 'Pause'
+    btnPause.setAttribute('aria-label', phase === 'paused' ? 'Resume game' : 'Pause game')
+  }
+  if (btnMute) {
+    btnMute.setAttribute('aria-pressed', muted ? 'true' : 'false')
+    btnMute.textContent = muted ? 'Unmute' : 'Mute'
+    btnMute.setAttribute('aria-label', muted ? 'Unmute sound' : 'Mute sound')
+  }
 }
 
 function ensureAudio() {
-  if (!audioCtx) {
-    audioCtx = new AudioContext()
+  try {
+    const AC = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+    if (!AC) return
+    if (!audioCtx) audioCtx = new AC()
+    if (audioCtx.state === 'suspended') {
+      void audioCtx.resume().catch(() => {
+        /* autoplay / gesture — ignore */
+      })
+    }
+  } catch {
+    audioCtx = null
   }
-  if (audioCtx.state === 'suspended') void audioCtx.resume()
 }
 
 function beep(freq: number, dur = 0.08, type: OscillatorType = 'square', gain = 0.04) {
   if (muted) return
   ensureAudio()
-  if (!audioCtx) return
-  const t0 = audioCtx.currentTime
-  const osc = audioCtx.createOscillator()
-  const g = audioCtx.createGain()
-  osc.type = type
-  osc.frequency.value = freq
-  g.gain.value = gain
-  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur)
-  osc.connect(g)
-  g.connect(audioCtx.destination)
-  osc.start(t0)
-  osc.stop(t0 + dur)
+  if (!audioCtx || audioCtx.state !== 'running') return
+  try {
+    const t0 = audioCtx.currentTime
+    const osc = audioCtx.createOscillator()
+    const g = audioCtx.createGain()
+    osc.type = type
+    osc.frequency.value = freq
+    g.gain.setValueAtTime(Math.max(0.0001, gain), t0)
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + Math.max(0.01, dur))
+    osc.connect(g)
+    g.connect(audioCtx.destination)
+    osc.start(t0)
+    osc.stop(t0 + dur)
+  } catch {
+    /* closed context / autoplay — never break the loop */
+  }
 }
 
 function flash(msg: string, hold = 2.1) {
   message = msg
   messageT = hold
+  if (announceEl) announceEl.textContent = msg
 }
 
 function shake(amount = 0.35) {
   shakeT = Math.max(shakeT, amount)
 }
 
+let spawnProtect = 0
+
 function resetPlayerNearStart() {
-  const p = pointOnTrack(0.92)
-  const tan = tangentOnTrack(0.92)
-  const n = normalOnTrack(0.92)
-  player.x = p.x + n.x * 18
-  player.y = p.y + n.y * 18
+  const t = PLAYER_SPAWN_PHASE
+  const p = pointOnTrack(t)
+  const tan = tangentOnTrack(t)
+  const n = normalOnTrack(t)
+  player.x = p.x + n.x * PLAYER_SPAWN_LANE
+  player.y = p.y + n.y * PLAYER_SPAWN_LANE
   player.angle = Math.atan2(tan.y, tan.x)
   player.speed = 0
   parkTimer = 0
+  spawnProtect = SPAWN_PROTECT_SEC
 }
 
 function placeBoosts() {
@@ -330,16 +378,22 @@ function placeBoosts() {
 function orbAt(t: number): BoostOrb {
   const p = pointOnTrack(t)
   const n = normalOnTrack(t)
-  return { x: p.x - n.x * 22, y: p.y - n.y * 22, alive: true, respawnAt: 0 }
+  return { x: p.x - n.x * 22, y: p.y - n.y * 22, alive: true, respawnIn: 0 }
+}
+
+function clearTouch() {
+  touch.accel = touch.brake = touch.left = touch.right = touch.handbrake = false
+  document.querySelectorAll('.pad.is-down').forEach((el) => el.classList.remove('is-down'))
 }
 
 function startGame() {
-  running = true
-  overlay.classList.add('hidden')
+  phase = 'playing'
+  setOverlayHidden(overlay, true)
+  setOverlayHidden(pauseOverlay, true)
   score = 0
   combo = 1
   parkTimer = 0
-  boostUntil = 0
+  boostRemain = 0
   perfectStreak = 0
   nearMissCd = 0
   sparks.length = 0
@@ -351,6 +405,10 @@ function startGame() {
   resetPlayerNearStart()
   scoreEl.textContent = '0'
   comboEl.textContent = '1'
+  keys.clear()
+  clearTouch()
+  syncChrome()
+  applyPlayMode()
   ensureAudio()
   beep(440, 0.1, 'triangle', 0.05)
   beep(660, 0.12, 'triangle', 0.04)
@@ -359,24 +417,91 @@ function startGame() {
   requestAnimationFrame(frame)
 }
 
+function pauseGame() {
+  if (phase !== 'playing') return
+  phase = 'paused'
+  keys.clear()
+  clearTouch()
+  setOverlayHidden(pauseOverlay, false)
+  syncChrome()
+  applyPlayMode()
+  btnResume?.focus()
+}
+
+function resumeGame() {
+  if (phase !== 'paused') return
+  phase = 'playing'
+  setOverlayHidden(pauseOverlay, true)
+  keys.clear()
+  clearTouch()
+  syncChrome()
+  applyPlayMode()
+  lastTs = performance.now()
+  requestAnimationFrame(frame)
+}
+
+function restartToTitle() {
+  phase = 'title'
+  keys.clear()
+  clearTouch()
+  setOverlayHidden(pauseOverlay, true)
+  setOverlayHidden(overlay, false)
+  parkTimer = 0
+  boostRemain = 0
+  shakeT = 0
+  messageT = 0
+  syncChrome()
+  applyPlayMode()
+  btnStart?.focus()
+  lastTs = performance.now()
+  requestAnimationFrame(titlePreview)
+}
+
+function toggleMute() {
+  muted = !muted
+  localStorage.setItem(MUTE_KEY, muted ? '1' : '0')
+  syncChrome()
+  flash(muted ? 'Muted' : 'Sound on')
+}
+
 btnStart.addEventListener('click', startGame)
+btnResume?.addEventListener('click', resumeGame)
+btnRestart?.addEventListener('click', restartToTitle)
+btnPause?.addEventListener('click', () => {
+  if (phase === 'playing') pauseGame()
+  else if (phase === 'paused') resumeGame()
+})
+btnMute?.addEventListener('click', toggleMute)
 
 window.addEventListener('keydown', (e) => {
-  keys.add(e.code)
-  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
-    e.preventDefault()
+  const onUi = e.target instanceof HTMLElement && !!e.target.closest('button, a, input, textarea')
+  if (!onUi) {
+    keys.add(e.code)
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
+      e.preventDefault()
+    }
   }
-  if (e.code === 'Enter' && !running) startGame()
-  if (e.code === 'KeyN') neonNight = !neonNight
-  if (e.code === 'KeyM') {
-    muted = !muted
-    localStorage.setItem(MUTE_KEY, muted ? '1' : '0')
-    flash(muted ? 'Muted' : 'Sound on')
+  if (e.code === 'Escape') {
+    if (phase === 'playing') {
+      e.preventDefault()
+      pauseGame()
+    } else if (phase === 'paused') {
+      e.preventDefault()
+      resumeGame()
+    }
+    return
   }
-  if (e.code === 'KeyH' && running) {
+  if ((e.code === 'KeyP' || e.code === 'KeyPause') && !onUi) {
+    if (phase === 'playing') pauseGame()
+    else if (phase === 'paused') resumeGame()
+  }
+  if (e.code === 'Enter' && phase === 'title' && !onUi) startGame()
+  if (e.code === 'KeyN' && !onUi) neonNight = !neonNight
+  if (e.code === 'KeyM' && !onUi) toggleMute()
+  if (e.code === 'KeyH' && phase === 'playing' && !onUi) {
     horn()
   }
-  if (e.code === 'KeyR' && running) {
+  if (e.code === 'KeyR' && phase === 'playing' && !onUi) {
     resetPlayerNearStart()
     flash(pick(['Retry — pride intact', 'Retry — flamingos judging', 'Retry — HOA watching']))
     beep(220, 0.1)
@@ -394,67 +519,29 @@ function trailerPose() {
 }
 
 
-/** Trailer bed AABB in local coords: length along +x (behind cab), width along y */
 function pointInTrailerBed(px: number, py: number): boolean {
-  const pose = trailerPose()
-  const dx = px - pose.x
-  const dy = py - pose.y
-  const c = Math.cos(-pose.angle)
-  const s = Math.sin(-pose.angle)
-  const lx = dx * c - dy * s
-  const ly = dx * s + dy * c
-  // bed sits behind cab (negative local x)
-  const bedStart = -(trailer.cabL * 0.15)
-  const bedEnd = -(trailer.cabL * 0.15 + trailer.bedL)
-  return lx <= bedStart && lx >= bedEnd && Math.abs(ly) <= trailer.bedW / 2 - 2
+  return pointInTrailerBedAt(px, py, trailerPose(), trailer)
 }
 
 function updatePlayer(dt: number) {
-  const accel = keys.has('KeyW') || keys.has('ArrowUp') || touch.accel
-  const brake = keys.has('KeyS') || keys.has('ArrowDown') || touch.brake
-  const left = keys.has('KeyA') || keys.has('ArrowLeft') || touch.left
-  const right = keys.has('KeyD') || keys.has('ArrowRight') || touch.right
-  const handbrake = keys.has('Space') || touch.handbrake
-
-  const boosted = performance.now() < boostUntil
-  const maxSpeed = boosted ? 320 : 240
-  const accelRate = boosted ? 280 : 200
-
-  if (accel) player.speed += accelRate * dt
-  if (brake) player.speed -= 260 * dt
-  if (!accel && !brake) player.speed *= Math.pow(0.22, dt) // drag
-  if (handbrake) player.speed *= Math.pow(0.35, dt)
-
-  player.speed = Math.max(-80, Math.min(maxSpeed, player.speed))
-
-  const steerMul = handbrake ? 2.4 : 1.35
-  const turn = (left ? -1 : 0) + (right ? 1 : 0)
-  const speedFactor = Math.min(1, Math.abs(player.speed) / 80)
-  player.angle += turn * steerMul * speedFactor * dt * (player.speed >= 0 ? 1 : -1)
-
-  player.x += Math.cos(player.angle) * player.speed * dt
-  player.y += Math.sin(player.angle) * player.speed * dt
-
-  // Soft keep near track (don't hard-wall — arcade feel)
-  softTrackPull(player, dt, 0.55)
-}
-
-function softTrackPull(car: Car, dt: number, strength: number) {
-  // Closest-ish phase via angle from center
-  const ang = Math.atan2((car.y - CY) / TRACK.ry, (car.x - CX) / TRACK.rx)
-  // geometric CCW angle → clockwise track param
-  const t = ((-ang / (Math.PI * 2)) + 1) % 1
-  const center = pointOnTrack(t)
-  const dist = Math.hypot(car.x - center.x, car.y - center.y)
-  const limit = TRACK.halfWidth + 12
-  if (dist > limit) {
-    const pull = (dist - limit) * strength * dt * 4
-    const nx = (center.x - car.x) / (dist || 1)
-    const ny = (center.y - car.y) / (dist || 1)
-    car.x += nx * pull * 40
-    car.y += ny * pull * 40
-    car.speed *= 0.98
-  }
+  const next = stepPlayer(
+    player,
+    {
+      accel: keys.has('KeyW') || keys.has('ArrowUp') || touch.accel,
+      brake: keys.has('KeyS') || keys.has('ArrowDown') || touch.brake,
+      left: keys.has('KeyA') || keys.has('ArrowLeft') || touch.left,
+      right: keys.has('KeyD') || keys.has('ArrowRight') || touch.right,
+      handbrake: keys.has('Space') || touch.handbrake,
+    },
+    dt,
+    boostRemain > 0,
+  )
+  const pulled = applySoftTrackPull(next, geom, dt, 0.55)
+  const safe = finitePose({ ...next, ...pulled })
+  player.x = safe.x
+  player.y = safe.y
+  player.angle = safe.angle
+  player.speed = safe.speed
 }
 
 function updateAi(dt: number) {
@@ -473,24 +560,23 @@ function updateAi(dt: number) {
 }
 
 function updateTrailer(dt: number) {
-  trailer.progress = (trailer.progress + trailer.speed * dt * 0.12) % 1
+  trailer.progress = stepTrailerProgress(trailer.progress, trailer.speed, dt)
 }
 
-function updateBoosts(now: number) {
+function updateBoosts(dt: number) {
+  boostRemain = tickBoostRemain(boostRemain, dt)
   for (const b of boosts) {
-    if (!b.alive && now >= b.respawnAt) {
-      b.alive = true
-    }
-    if (b.alive) {
-      const d = Math.hypot(player.x - b.x, player.y - b.y)
-      if (d < 22) {
-        b.alive = false
-        b.respawnAt = now + 6000
-        boostUntil = now + 3500
-        flash('BOOST!')
-        beep(880, 0.08, 'sawtooth', 0.035)
-        beep(1200, 0.1, 'sawtooth', 0.03)
-      }
+    const clock = tickOrbRespawn(b.respawnIn, dt, b.alive)
+    b.alive = clock.alive
+    b.respawnIn = clock.respawnIn
+    const d = Math.hypot(player.x - b.x, player.y - b.y)
+    if (collectBoost(b.alive, d)) {
+      b.alive = false
+      b.respawnIn = 6
+      boostRemain = 3.5
+      flash('BOOST!')
+      beep(880, 0.08, 'sawtooth', 0.035)
+      beep(1200, 0.1, 'sawtooth', 0.03)
     }
   }
 }
@@ -517,19 +603,19 @@ function updateSparks(dt: number) {
     s.life -= dt
     s.x += s.vx * dt
     s.y += s.vy * dt
-    s.vx *= 0.96
-    s.vy *= 0.96
+    s.vx *= Math.pow(0.96, dt * 60)
+    s.vy *= Math.pow(0.96, dt * 60)
     if (s.life <= 0) sparks.splice(i, 1)
   }
 }
 
 function updateNearMiss(dt: number) {
   nearMissCd = Math.max(0, nearMissCd - dt)
-  if (nearMissCd > 0) return
+  if (spawnProtect > 0 || nearMissCd > 0) return
   for (const c of aiCars) {
     const d = Math.hypot(c.x - player.x, c.y - player.y)
-    if (d > 28 && d < 48 && Math.abs(player.speed) > 90) {
-      const bonus = 15 * combo
+    if (isNearMiss(d, player.speed)) {
+      const bonus = nearMissBonus(combo)
       score += bonus
       scoreEl.textContent = String(score)
       if (score > best) {
@@ -548,9 +634,10 @@ function updateNearMiss(dt: number) {
 
 function updateBumps(dt: number) {
   hornCd = Math.max(0, hornCd - dt)
+  if (spawnProtect > 0) return
   for (const c of aiCars) {
     const d = Math.hypot(c.x - player.x, c.y - player.y)
-    if (d < 26) {
+    if (isBump(d)) {
       // soft shove
       const ang = Math.atan2(player.y - c.y, player.x - c.x)
       player.x += Math.cos(ang) * 40 * dt
@@ -567,7 +654,7 @@ function updateBumps(dt: number) {
 }
 
 function updateRadio(dt: number) {
-  if (!running) return
+  if (phase !== 'playing') return
   radioT -= dt
   if (radioT > 0) return
   radioT = 10 + Math.random() * 14
@@ -587,39 +674,22 @@ function updateRadio(dt: number) {
 }
 
 function updateParking(dt: number) {
-  const onBed =
-    pointInTrailerBed(player.x, player.y) &&
-    Math.abs(player.speed) < 55
+  const inBed = pointInTrailerBed(player.x, player.y)
+  const onBed = isParkHoldReady(inBed, player.speed)
 
   if (onBed) {
     parkTimer += dt
-    if (parkTimer >= 1.5) {
+    if (parkTimer >= PARK_HOLD_SEC) {
       const pose = trailerPose()
-      // local bed coords for centering
-      const dx = player.x - pose.x
-      const dy = player.y - pose.y
-      const c = Math.cos(-pose.angle)
-      const s = Math.sin(-pose.angle)
-      const lx = dx * c - dy * s
-      const ly = dx * s + dy * c
-      const bedMidX = -(trailer.cabL * 0.15 + trailer.bedL / 2)
-      const centered = Math.abs(lx - bedMidX) < 18 && Math.abs(ly) < 10
-      const slow = Math.abs(player.speed) < 22
-      const perfect = centered && slow
-
-      let gained = 100 * combo
-      if (perfect) {
-        perfectStreak = Math.min(5, perfectStreak + 1)
-        gained += 50 * combo * perfectStreak
-      } else {
-        perfectStreak = 0
-      }
-
+      const result = evaluatePark(player, pose, trailer, combo, perfectStreak)
+      const perfect = result.perfect
+      const gained = result.gained
+      perfectStreak = result.nextStreak
       score += gained
-      combo = Math.min(9, combo + 1)
+      combo = result.nextCombo
       scoreEl.textContent = String(score)
       comboEl.textContent = String(combo)
-      spawnParkSparks(perfect)
+      if (!reduceMotion) spawnParkSparks(perfect)
       const title = comboTitle(combo)
       const line = perfect ? pick(PERFECT_LINES) : pick(PARK_LINES)
       const head = perfect ? `PERFECT x${perfectStreak}` : 'PARKED'
@@ -642,16 +712,14 @@ function updateParking(dt: number) {
       player.speed = 40
     }
   } else {
-    if (parkTimer > 0.25 && pointInTrailerBed(player.x, player.y) === false) {
-      if (parkTimer > 0.4) {
-        combo = 1
-        perfectStreak = 0
-        comboEl.textContent = '1'
-        flash(pick(FAIL_LINES))
-        beep(180, 0.15, 'square', 0.04)
-      }
+    if (shouldResetComboOnMiss(parkTimer, inBed)) {
+      combo = 1
+      perfectStreak = 0
+      comboEl.textContent = '1'
+      flash(pick(FAIL_LINES))
+      beep(180, 0.15, 'square', 0.04)
     }
-    parkTimer = Math.max(0, parkTimer - dt * 1.2)
+    parkTimer = decayParkTimer(parkTimer, dt)
   }
 }
 
@@ -776,7 +844,7 @@ function drawTrack() {
     ctx.strokeStyle = 'rgba(80,180,255,0.35)'
     ctx.lineWidth = 2
     ctx.shadowColor = '#4ab0ff'
-    ctx.shadowBlur = 14
+    ctx.shadowBlur = reduceMotion ? 0 : 14
     ctx.beginPath()
     ctx.ellipse(CX, CY, TRACK.rx + TRACK.halfWidth + 1, TRACK.ry + TRACK.halfWidth + 1, 0, 0, Math.PI * 2)
     ctx.stroke()
@@ -978,7 +1046,7 @@ function drawCar(car: Car) {
   const van = car.kind === 'van'
 
   // wheels (motion slant)
-  const spin = (performance.now() / 40) % 6
+  const spin = reduceMotion ? 0 : (performance.now() / 40) % 6
   ctx.fillStyle = '#0c0c0e'
   const wheel = (wx: number, wy: number) => {
     ctx.save()
@@ -1189,7 +1257,7 @@ function roundRect(x: number, y: number, w: number, h: number, r: number) {
 function drawBoosts(now: number) {
   for (const b of boosts) {
     if (!b.alive) continue
-    const pulse = 1 + Math.sin(now / 180) * 0.15
+    const pulse = reduceMotion ? 1 : 1 + Math.sin(now / 180) * 0.15
     ctx.save()
     ctx.translate(b.x, b.y)
     ctx.fillStyle = neonNight ? '#40ffd0' : '#20c090'
@@ -1229,7 +1297,7 @@ function drawSparks() {
 function drawHudOverlay() {
   // park progress bar
   if (parkTimer > 0) {
-    const pct = Math.min(1, parkTimer / 1.5)
+    const pct = Math.min(1, parkTimer / PARK_HOLD_SEC)
     const bw = 160
     const bx = CX - bw / 2
     const by = 28
@@ -1246,34 +1314,43 @@ function drawHudOverlay() {
   }
 
   if (messageT > 0) {
-    ctx.fillStyle = `rgba(255,240,180,${Math.min(1, messageT)})`
-    ctx.font = 'bold 22px sans-serif'
+    const alpha = reduceMotion ? 1 : Math.min(1, messageT)
+    ctx.font = 'bold 20px sans-serif'
     ctx.textAlign = 'center'
+    const tw = Math.min(W - 40, ctx.measureText(message).width + 24)
+    ctx.fillStyle = `rgba(0,0,0,${0.62 * alpha})`
+    ctx.fillRect(CX - tw / 2, H - 56, tw, 30)
+    ctx.fillStyle = `rgba(255,244,200,${alpha})`
     ctx.fillText(message, CX, H - 36)
   }
 
   // corner status
   ctx.font = '12px sans-serif'
   ctx.textAlign = 'left'
-  ctx.fillStyle = 'rgba(200,220,255,0.7)'
   const bits = [
     neonNight ? 'NEON' : 'DAY',
     muted ? 'MUTE' : 'SFX',
-    performance.now() < boostUntil ? 'BOOST' : '',
-    running ? comboTitle(combo) : '',
+    boostRemain > 0 ? 'BOOST' : '',
+    phase === 'playing' ? comboTitle(combo) : '',
   ].filter(Boolean)
-  ctx.fillText(bits.join(' · '), 16, H - 14)
+  const status = bits.join(' · ')
+  const sw = ctx.measureText(status).width + 16
+  ctx.fillStyle = 'rgba(0,0,0,0.62)'
+  ctx.fillRect(10, H - 28, sw, 20)
+  ctx.fillStyle = '#e8f2ff'
+  ctx.fillText(status, 18, H - 14)
 }
 
 function frame(ts: number) {
-  if (!running) return
-  const dt = Math.min(0.05, (ts - lastTs) / 1000)
+  if (phase !== 'playing') return
+  const dt = clampDt((ts - lastTs) / 1000)
   lastTs = ts
 
+  spawnProtect = Math.max(0, spawnProtect - dt)
   updatePlayer(dt)
   updateAi(dt)
   updateTrailer(dt)
-  updateBoosts(ts)
+  updateBoosts(dt)
   updateParking(dt)
   updateNearMiss(dt)
   updateBumps(dt)
@@ -1283,7 +1360,7 @@ function frame(ts: number) {
   if (messageT > 0) messageT -= dt
 
   ctx.save()
-  if (shakeT > 0) {
+  if (shakeT > 0 && !reduceMotion) {
     const mag = shakeT * 10
     ctx.translate((Math.random() - 0.5) * mag, (Math.random() - 0.5) * mag)
   }
@@ -1301,8 +1378,8 @@ function frame(ts: number) {
 
 // Idle title preview loop
 function titlePreview(ts: number) {
-  if (running) return
-  const dt = Math.min(0.05, (ts - lastTs) / 1000 || 0.016)
+  if (phase !== 'title') return
+  const dt = clampDt((ts - lastTs) / 1000 || 0.016)
   lastTs = ts
   trailer.progress = (trailer.progress + 0.04 * dt) % 1
   for (const car of aiCars) {
@@ -1367,25 +1444,45 @@ function bindTouchPad() {
     el.addEventListener('pointerleave', (e) => {
       if ((e as PointerEvent).buttons === 0) set(false, e)
     })
+    el.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' || e.code === 'Enter') e.preventDefault()
+    })
   }
 }
 
 function bindMobileChrome() {
   applyPlayMode()
-  window.addEventListener('resize', applyPlayMode)
+  const onResize = () => {
+    applyPlayMode()
+    clearTouch()
+  }
+  window.addEventListener('resize', onResize)
   window.addEventListener('orientationchange', () => {
     // iOS fires before dimensions settle
-    setTimeout(applyPlayMode, 250)
+    clearTouch()
+    setTimeout(onResize, 250)
   })
   if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', applyPlayMode)
   }
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-      touch.accel = touch.brake = touch.left = touch.right = touch.handbrake = false
-      document.querySelectorAll('.pad.is-down').forEach((el) => el.classList.remove('is-down'))
-    }
+    clearTouch()
+    if (phaseAfterHidden(phase, document.hidden) === 'paused') pauseGame()
   })
+  window.addEventListener('blur', () => {
+    clearTouch()
+    if (phaseAfterBlur(phase, true) === 'paused') pauseGame()
+  })
+  document.addEventListener(
+    'touchmove',
+    (e) => {
+      const t = e.target
+      if (t instanceof Element && t.closest('.panel')) return
+      e.preventDefault()
+    },
+    { passive: false },
+  )
+  document.addEventListener('gesturestart', (e) => e.preventDefault())
   // First Start tap unlocks WebAudio on iOS
   btnStart.addEventListener(
     'touchend',
@@ -1403,12 +1500,15 @@ function rotateTagline() {
   const el = document.getElementById('tagline')
   if (!el) return
   el.textContent = pick(TAGLINES)
+  if (reduceMotion) return
   setInterval(() => {
     el.textContent = pick(TAGLINES)
   }, 4200)
 }
 rotateTagline()
 
+syncChrome()
+btnStart?.focus({ preventScroll: true })
 placeBoosts()
 lastTs = performance.now()
 requestAnimationFrame(titlePreview)
