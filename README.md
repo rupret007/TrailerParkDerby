@@ -1,34 +1,29 @@
 # TrailerParkDerby
 
-## Play online
+Public browser arcade: top-down oval race with AI traffic. Score by parking on a **moving flatbed trailer** and holding ~1.5s with speed under control. Chain parks for combo (up to Trailer Royalty). Centered + slow parks stack a perfect-streak bonus.
 
-**Live:** https://rupret007.github.io/TrailerParkDerby/
+**Live (GitHub Pages, from `main` only):** https://rupret007.github.io/TrailerParkDerby/
 
-Works on other computers and phones (HTTPS). On a phone, use the on-screen pads; rotate to landscape if the track feels tight.
+Desktop and phones (HTTPS). On a phone, use the on-screen pads; rotate to landscape if the track feels tight. Audio needs a tap/click to unlock on iOS.
 
-Local: `npm install && npm run dev` → http://127.0.0.1:5173/
+## Quick start
 
-Top-down oval arcade racer: circulate with AI traffic and **park on a moving flatbed trailer**.
-
-## Play
+Node 22. From the repo:
 
 ```bash
-npm i
+npm ci
+npm test
 npm run dev
 ```
 
-Open the local URL Vite prints (usually `http://localhost:5173`).
-
-Production build:
+Open the URL Vite prints (usually `http://localhost:5173/TrailerParkDerby/`). Root `/` redirects there.
 
 ```bash
 npm run build
-npm run preview
+npm run preview   # http://localhost:4173/TrailerParkDerby/
 ```
 
-## Goal
-
-Drive onto the **moving trailer bed** and stay parked (~speed under control) for **~1.5 seconds** to score. Fall off or miss and retry. Chain parks for combo multipliers.
+No env vars. `package.json` `"private": true` means do not publish to npm — the GitHub repo is public.
 
 ## Controls
 
@@ -38,35 +33,42 @@ Drive onto the **moving trailer bed** and stay parked (~speed under control) for
 | `S` / `↓` | Brake / reverse |
 | `A` `D` / `←` `→` | Steer |
 | `Space` | Handbrake |
-| `Enter` | Start (title screen) |
-| `N` | Toggle neon night / day |
+| `Enter` | Start (title) |
+| `Esc` / `P` | Pause / resume |
+| `N` | Neon night / day |
 | `M` | Mute / unmute (saved) |
+| `H` | Horn |
 | `R` | Soft retry (reset car) |
+
+Pause overlay: Resume or Restart (title). Tab hide / window blur also pauses. Phone: left steer pads, right Gas / Brake / Handbrake; HUD Pause + Mute; double-tap Gas to honk.
 
 ## Features
 
-- Oval Canvas2D track with AI cars
-- Moving flatbed trailer target
+- Oval Canvas2D track, named AI rivals, moving flatbed target
 - Score + combo, localStorage high score
-- Neon boost pickups
-- Neon night toggle
-- Simple WebAudio beeps + mute
-- Title + how-to overlay
+- Perfect park streak, near-miss skim points, neon boost orbs
+- Pause / resume / restart; spawn opposite the AI pack with brief bump immunity
+- Frame-rate–independent off-track damping; boost/orb clocks in game time
+- Touch pads, landscape hint, mute + pause chrome
+- WebAudio beeps, announcer one-liners, combo titles (Single-Wide → Trailer Royalty)
+- Reduced-motion (no shake/sparks/pulses), live-region announcer, labeled controls
+- Vector art drawn in code — no external media
 
-Original vector art drawn in code — no external media.
+## Build / test
 
-## Stack
+CI (pull requests and non-`main` pushes) uses Node 22:
 
-Vite + vanilla TypeScript.
+```bash
+npm ci
+npm test        # vitest, src/**/*.test.ts
+npm run build   # tsc && vite build
+```
 
-## Extras (v1.1)
-- **Perfect park:** centered + slow on the bed stacks a bonus streak
-- **Near miss:** skim AI traffic for combo-scaled points
-- **Touch pads:** on-screen controls for phone/tablet
-- Park spark bursts (gold on perfect)
+GitHub Pages deploys from **`main` only** (`npm ci` + `npm run build`, then `dist/`). This branch is not auto-published.
 
-## Flavor
-- Announcer one-liners on park / fail / near-miss
-- Combo titles: Single-Wide → Trailer Royalty
-- Named rivals, flamingos, satellite dish, radio chatter
-- Horn: `H` on desktop, double-tap Gas on phone
+## Status / limits
+
+- Browser-only; no accounts, backend, or secrets
+- High score and mute are per-device (`localStorage`)
+- Phone play is landscape-first; portrait shows a rotate hint
+- Physical iPhone thumbs / iOS audio unlock / real reduced-motion: not verified in this pass
