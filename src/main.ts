@@ -23,6 +23,7 @@ import {
   pointInTrailerBed as pointInTrailerBedAt,
   pointOnTrack as pointOnTrackAt,
   shouldResetComboOnMiss,
+  shouldSuppressTouchGesture,
   stepPlayer,
   stepTrailerProgress,
   tangentOnTrack as tangentOnTrackAt,
@@ -1473,16 +1474,17 @@ function bindMobileChrome() {
     clearTouch()
     if (phaseAfterBlur(phase, true) === 'paused') pauseGame()
   })
+  const isInZoomablePanel = (target: EventTarget | null) => target instanceof Element && !!target.closest('.panel')
   document.addEventListener(
     'touchmove',
     (e) => {
-      const t = e.target
-      if (t instanceof Element && t.closest('.panel')) return
-      e.preventDefault()
+      if (shouldSuppressTouchGesture(isInZoomablePanel(e.target))) e.preventDefault()
     },
     { passive: false },
   )
-  document.addEventListener('gesturestart', (e) => e.preventDefault())
+  document.addEventListener('gesturestart', (e) => {
+    if (shouldSuppressTouchGesture(isInZoomablePanel(e.target))) e.preventDefault()
+  })
   // First Start tap unlocks WebAudio on iOS
   btnStart.addEventListener(
     'touchend',

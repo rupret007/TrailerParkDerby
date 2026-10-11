@@ -10,7 +10,9 @@ html, body {
   padding: 0;
   background: #060a12;
   overscroll-behavior: none;
-  touch-action: none;
+  /* pinch-zoom stays available for title/pause text; #game and .pad opt back
+     into touch-action: none so active play still suppresses gestures */
+  touch-action: pinch-zoom;
   height: 100%;
   overflow: hidden;
   -webkit-user-select: none;

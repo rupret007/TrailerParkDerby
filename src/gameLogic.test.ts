@@ -23,6 +23,7 @@ import {
   PLAYER_SPAWN_PHASE,
   spawnClearOfTraffic,
   phaseAfterBlur,
+  shouldSuppressTouchGesture,
   phaseAfterHidden,
   pointInTrailerBed,
   pointOnTrack,
@@ -285,5 +286,15 @@ describe('pause phase machine', () => {
     expect(phaseAfterHidden('paused', true)).toBe('paused')
     expect(phaseAfterBlur('playing', true)).toBe('paused')
     expect(phaseAfterBlur('title', true)).toBe('title')
+  })
+})
+
+describe('touch gesture suppression (zoom on title/pause, not on play surfaces)', () => {
+  it('allows pinch-zoom/scroll gestures that originate inside a title or pause panel', () => {
+    expect(shouldSuppressTouchGesture(true)).toBe(false)
+  })
+
+  it('still suppresses gestures outside a panel, e.g. the canvas or touch pads', () => {
+    expect(shouldSuppressTouchGesture(false)).toBe(true)
   })
 })
