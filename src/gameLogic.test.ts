@@ -1,3 +1,6 @@
+import indexHtml from '../index.html?raw'
+import mainTsSource from './main.ts?raw'
+import styleCss from './style.css?raw'
 import { describe, expect, it } from 'vitest'
 import {
   AI_SPAWN_PHASES,
@@ -296,5 +299,42 @@ describe('touch gesture suppression (zoom on title/pause, not on play surfaces)'
 
   it('still suppresses gestures outside a panel, e.g. the canvas or touch pads', () => {
     expect(shouldSuppressTouchGesture(false)).toBe(true)
+  })
+})
+
+describe('shipped zoom-unlock surfaces (guards against reverting the actual fix)', () => {
+  it('does not lock the viewport against pinch-zoom', () => {
+    const viewport = indexHtml.match(/<meta name="viewport"[^>]*>/)?.[0] ?? ''
+    expect(viewport).not.toBe('')
+    expect(viewport).not.toMatch(/user-scalable\s*=\s*no/)
+    expect(viewport).not.toMatch(/maximum-scale\s*=\s*1(\.0+)?\b/)
+  })
+
+  it('does not set touch-action: none on html, body', () => {
+    const cssWithoutComments = styleCss.replace(/\/\*[\s\S]*?\*\//g, '')
+    const htmlBodyRule = cssWithoutComments.match(/html,\s*body\s*\{[^}]*\}/)?.[0] ?? ''
+    expect(htmlBodyRule).not.toBe('')
+    expect(htmlBodyRule).not.toMatch(/touch-action:\s*none/)
+    expect(htmlBodyRule).toMatch(/touch-action:\s*pinch-zoom/)
+  })
+
+  it('still suppresses gestures on the touch pads via preventDefault', () => {
+    expect(mainTsSource).toMatch(
+      /padRoot\.addEventListener\('touchstart',\s*\(e\)\s*=>\s*e\.preventDefault\(\),\s*\{ passive: false \}\)/,
+    )
+    expect(mainTsSource).toMatch(
+      /padRoot\.addEventListener\('touchmove',\s*\(e\)\s*=>\s*e\.preventDefault\(\),\s*\{ passive: false \}\)/,
+    )
+  })
+
+  it('wires the panel exemption into both the touchmove and gesturestart listeners', () => {
+    expect(mainTsSource).toMatch(
+      /isInZoomablePanel = \(target: EventTarget \| null\) => target instanceof Element && !!target\.closest\('\.panel'\)/,
+    )
+    const touchmoveHandler =
+      mainTsSource.match(/document\.addEventListener\(\s*'touchmove',[\s\S]*?\{ passive: false \},?\s*\)/)?.[0] ?? ''
+    expect(touchmoveHandler).toMatch(/shouldSuppressTouchGesture\(isInZoomablePanel\(e\.target\)\)/)
+    const gesturestartHandler = mainTsSource.match(/document\.addEventListener\('gesturestart',[\s\S]*?\}\)/)?.[0] ?? ''
+    expect(gesturestartHandler).toMatch(/shouldSuppressTouchGesture\(isInZoomablePanel\(e\.target\)\)/)
   })
 })
