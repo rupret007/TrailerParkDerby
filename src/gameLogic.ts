@@ -270,6 +270,43 @@ export function shouldSuppressTouchGesture(targetIsInZoomablePanel: boolean): bo
   return !targetIsInZoomablePanel
 }
 
+/** Dialog actions that may receive Tab while paused. HUD Pause/Mute stay out. */
+export const PAUSE_DIALOG_ACTION_IDS = ['btn-resume', 'btn-restart'] as const
+
+/** Gameplay surface to restore after Resume so driving keys are not eaten by a button. */
+export const RESUME_FOCUS_TARGET_ID = 'game'
+
+export type PauseHudPolicy = {
+  hudInert: boolean
+  hudActionsHidden: boolean
+  pauseButtonVisible: boolean
+  pauseButtonLabel: 'Pause'
+}
+
+/** One Resume lives in the pause dialog; covered HUD controls stay inert and unlabeled as Resume. */
+export function pauseHudPolicy(phase: RunPhase): PauseHudPolicy {
+  const paused = phase === 'paused'
+  return {
+    hudInert: paused,
+    hudActionsHidden: paused,
+    pauseButtonVisible: phase === 'playing',
+    pauseButtonLabel: 'Pause',
+  }
+}
+
+/** Cycle Tab / Shift+Tab across pause-dialog actions; unknown focus starts at an end. */
+export function nextPauseDialogFocus(
+  actionIds: readonly string[],
+  activeId: string | null,
+  shiftKey: boolean,
+): string {
+  if (actionIds.length === 0) return ''
+  const idx = activeId ? actionIds.indexOf(activeId) : -1
+  if (idx < 0) return shiftKey ? actionIds[actionIds.length - 1]! : actionIds[0]!
+  const next = (idx + (shiftKey ? -1 : 1) + actionIds.length) % actionIds.length
+  return actionIds[next]!
+}
+
 export function clampDt(dt: number, max = 0.05): number {
   if (!Number.isFinite(dt) || dt < 0) return 0
   return Math.min(max, dt)

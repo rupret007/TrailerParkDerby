@@ -25,9 +25,13 @@ import {
   PLAYER_SPAWN_LANE,
   PLAYER_SPAWN_PHASE,
   spawnClearOfTraffic,
+  nextPauseDialogFocus,
+  PAUSE_DIALOG_ACTION_IDS,
+  pauseHudPolicy,
   phaseAfterBlur,
   shouldSuppressTouchGesture,
   phaseAfterHidden,
+  RESUME_FOCUS_TARGET_ID,
   pointInTrailerBed,
   pointOnTrack,
   shouldResetComboOnMiss,
@@ -336,5 +340,75 @@ describe('shipped zoom-unlock surfaces (guards against reverting the actual fix)
     expect(touchmoveHandler).toMatch(/shouldSuppressTouchGesture\(isInZoomablePanel\(e\.target\)\)/)
     const gesturestartHandler = mainTsSource.match(/document\.addEventListener\('gesturestart',[\s\S]*?\}\)/)?.[0] ?? ''
     expect(gesturestartHandler).toMatch(/shouldSuppressTouchGesture\(isInZoomablePanel\(e\.target\)\)/)
+  })
+})
+
+describe('pause dialog focus policy (one Resume, HUD inert, Tab stays inside)', () => {
+  it('hides and inerts covered HUD actions only while paused, and never labels them Resume', () => {
+    expect(pauseHudPolicy('paused')).toEqual({
+      hudInert: true,
+      hudActionsHidden: true,
+      pauseButtonVisible: false,
+      pauseButtonLabel: 'Pause',
+    })
+    expect(pauseHudPolicy('playing')).toEqual({
+      hudInert: false,
+      hudActionsHidden: false,
+      pauseButtonVisible: true,
+      pauseButtonLabel: 'Pause',
+    })
+    expect(pauseHudPolicy('title')).toEqual({
+      hudInert: false,
+      hudActionsHidden: false,
+      pauseButtonVisible: false,
+      pauseButtonLabel: 'Pause',
+    })
+  })
+
+  it('cycles Tab and Shift+Tab across the dialog Resume/Restart pair only', () => {
+    expect(PAUSE_DIALOG_ACTION_IDS).toEqual(['btn-resume', 'btn-restart'])
+    expect(nextPauseDialogFocus(PAUSE_DIALOG_ACTION_IDS, 'btn-resume', false)).toBe('btn-restart')
+    expect(nextPauseDialogFocus(PAUSE_DIALOG_ACTION_IDS, 'btn-restart', false)).toBe('btn-resume')
+    expect(nextPauseDialogFocus(PAUSE_DIALOG_ACTION_IDS, 'btn-resume', true)).toBe('btn-restart')
+    expect(nextPauseDialogFocus(PAUSE_DIALOG_ACTION_IDS, 'btn-restart', true)).toBe('btn-resume')
+    expect(nextPauseDialogFocus(PAUSE_DIALOG_ACTION_IDS, 'btn-pause', false)).toBe('btn-resume')
+    expect(nextPauseDialogFocus(PAUSE_DIALOG_ACTION_IDS, 'btn-mute', true)).toBe('btn-restart')
+    expect(nextPauseDialogFocus(PAUSE_DIALOG_ACTION_IDS, null, false)).toBe('btn-resume')
+  })
+
+  it('restores gameplay focus to the canvas, not a HUD button', () => {
+    expect(RESUME_FOCUS_TARGET_ID).toBe('game')
+  })
+})
+
+describe('shipped pause-dialog surfaces (guards against reverting the actual fix)', () => {
+  it('does not relabel the HUD Pause control to Resume', () => {
+    expect(mainTsSource).not.toMatch(/phase === 'paused' \? 'Resume'/)
+    expect(mainTsSource).not.toMatch(/textContent = phase === 'paused' \? 'Resume'/)
+    expect(mainTsSource).toMatch(/btnPause\.textContent = policy\.pauseButtonLabel/)
+  })
+
+  it('marks covered HUD controls inert and hidden while the pause overlay is open', () => {
+    expect(mainTsSource).toMatch(/const policy = pauseHudPolicy\(phase\)/)
+    expect(mainTsSource).toMatch(/hud\.setAttribute\('inert'/)
+    expect(mainTsSource).toMatch(/hudActions\.setAttribute\('hidden'/)
+    expect(mainTsSource).toMatch(/hudActions\.setAttribute\('aria-hidden',\s*'true'\)/)
+  })
+
+  it('keeps Tab inside the pause dialog and restores canvas focus on resume', () => {
+    expect(mainTsSource).toMatch(/nextPauseDialogFocus\(PAUSE_DIALOG_ACTION_IDS,\s*activeId,\s*e\.shiftKey\)/)
+    expect(mainTsSource).toMatch(/e\.key !== 'Tab'/)
+    expect(mainTsSource).toMatch(
+      /document\.getElementById\(RESUME_FOCUS_TARGET_ID\)\?\.focus\(\{ preventScroll: true \}\)/,
+    )
+  })
+
+  it('ships one dialog Resume action and a programmatically focusable canvas', () => {
+    const pauseOverlay = indexHtml.match(/id="pause-overlay"[\s\S]*?<\/div>\s*<\/div>/)?.[0] ?? ''
+    expect(pauseOverlay).toMatch(/role="dialog"/)
+    expect(pauseOverlay).toMatch(/id="btn-resume"[^>]*>RESUME</)
+    expect(pauseOverlay).toMatch(/id="btn-restart"/)
+    expect(pauseOverlay.match(/RESUME/g)?.length).toBe(1)
+    expect(indexHtml).toMatch(/<canvas id="game"[^>]*tabindex="-1"/)
   })
 })

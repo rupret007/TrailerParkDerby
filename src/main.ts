@@ -18,10 +18,14 @@ import {
   PLAYER_SPAWN_LANE,
   PLAYER_SPAWN_PHASE,
   SPAWN_PROTECT_SEC,
+  nextPauseDialogFocus,
+  PAUSE_DIALOG_ACTION_IDS,
+  pauseHudPolicy,
   phaseAfterBlur,
   phaseAfterHidden,
   pointInTrailerBed as pointInTrailerBedAt,
   pointOnTrack as pointOnTrackAt,
+  RESUME_FOCUS_TARGET_ID,
   shouldResetComboOnMiss,
   shouldSuppressTouchGesture,
   stepPlayer,
@@ -42,6 +46,8 @@ const btnResume = document.getElementById('btn-resume') as HTMLButtonElement
 const btnRestart = document.getElementById('btn-restart') as HTMLButtonElement
 const btnPause = document.getElementById('btn-pause') as HTMLButtonElement
 const btnMute = document.getElementById('btn-mute') as HTMLButtonElement
+const hud = document.getElementById('hud') as HTMLDivElement
+const hudActions = document.getElementById('hud-actions') as HTMLDivElement
 const scoreEl = document.getElementById('score') as HTMLSpanElement
 const comboEl = document.getElementById('combo') as HTMLSpanElement
 const bestEl = document.getElementById('best') as HTMLSpanElement
@@ -296,12 +302,25 @@ function setOverlayHidden(el: HTMLElement, hidden: boolean) {
 }
 
 function syncChrome() {
+  const policy = pauseHudPolicy(phase)
+  if (hud) {
+    if (policy.hudInert) hud.setAttribute('inert', '')
+    else hud.removeAttribute('inert')
+  }
+  if (hudActions) {
+    if (policy.hudActionsHidden) {
+      hudActions.setAttribute('hidden', '')
+      hudActions.setAttribute('aria-hidden', 'true')
+    } else {
+      hudActions.removeAttribute('hidden')
+      hudActions.removeAttribute('aria-hidden')
+    }
+  }
   if (btnPause) {
-    const show = phase === 'playing' || phase === 'paused'
-    btnPause.hidden = !show
-    btnPause.setAttribute('aria-hidden', show ? 'false' : 'true')
-    btnPause.textContent = phase === 'paused' ? 'Resume' : 'Pause'
-    btnPause.setAttribute('aria-label', phase === 'paused' ? 'Resume game' : 'Pause game')
+    btnPause.hidden = !policy.pauseButtonVisible
+    btnPause.setAttribute('aria-hidden', policy.pauseButtonVisible ? 'false' : 'true')
+    btnPause.textContent = policy.pauseButtonLabel
+    btnPause.setAttribute('aria-label', 'Pause game')
   }
   if (btnMute) {
     btnMute.setAttribute('aria-pressed', muted ? 'true' : 'false')
@@ -439,6 +458,7 @@ function resumeGame() {
   applyPlayMode()
   lastTs = performance.now()
   requestAnimationFrame(frame)
+  document.getElementById(RESUME_FOCUS_TARGET_ID)?.focus({ preventScroll: true })
 }
 
 function restartToTitle() {
@@ -473,6 +493,23 @@ btnPause?.addEventListener('click', () => {
   else if (phase === 'paused') resumeGame()
 })
 btnMute?.addEventListener('click', toggleMute)
+
+document.addEventListener('keydown', (e) => {
+  if (phase !== 'paused' || e.key !== 'Tab') return
+  const activeId = e.target instanceof HTMLElement ? e.target.id : null
+  const nextId = nextPauseDialogFocus(PAUSE_DIALOG_ACTION_IDS, activeId, e.shiftKey)
+  const next = document.getElementById(nextId)
+  if (!next) return
+  e.preventDefault()
+  next.focus()
+})
+
+document.addEventListener('focusin', (e) => {
+  if (phase !== 'paused') return
+  const target = e.target
+  if (target instanceof Node && pauseOverlay.contains(target)) return
+  btnResume?.focus()
+})
 
 window.addEventListener('keydown', (e) => {
   const onUi = e.target instanceof HTMLElement && !!e.target.closest('button, a, input, textarea')
