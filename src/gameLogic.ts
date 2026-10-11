@@ -265,6 +265,11 @@ export function phaseAfterBlur(phase: RunPhase, windowBlurred: boolean): RunPhas
   return phase
 }
 
+/** Title/pause text may be pinch-zoomed; active play surfaces keep gestures suppressed. */
+export function shouldSuppressTouchGesture(targetIsInZoomablePanel: boolean): boolean {
+  return !targetIsInZoomablePanel
+}
+
 export function clampDt(dt: number, max = 0.05): number {
   if (!Number.isFinite(dt) || dt < 0) return 0
   return Math.min(max, dt)
