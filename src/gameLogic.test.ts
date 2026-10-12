@@ -338,3 +338,40 @@ describe('shipped zoom-unlock surfaces (guards against reverting the actual fix)
     expect(gesturestartHandler).toMatch(/shouldSuppressTouchGesture\(isInZoomablePanel\(e\.target\)\)/)
   })
 })
+
+describe('HUD hidden behind the title overlay (score/hint/Mute must not be a ghost control)', () => {
+  it('wires a hud element lookup that syncChrome can hide', () => {
+    expect(mainTsSource).toMatch(/const hud = document\.getElementById\('hud'\)/)
+  })
+
+  it('hides the HUD with the native hidden attribute while phase is title, and reveals it otherwise', () => {
+    const syncChromeBody = mainTsSource.match(/function syncChrome\(\) \{[\s\S]*?\n\}/)?.[0] ?? ''
+    expect(syncChromeBody).not.toBe('')
+    const hudBlock = syncChromeBody.match(/if \(hud\) \{[\s\S]*?\n  \}/)?.[0] ?? ''
+    expect(hudBlock).not.toBe('')
+    // Must be driven by the title phase (not merely a static hide), so it un-hides once play starts.
+    expect(hudBlock).toMatch(/phase === 'title'/)
+    expect(hudBlock).toMatch(/hud\.toggleAttribute\('hidden',\s*hideHud\)/)
+    expect(hudBlock).toMatch(/hud\.setAttribute\('aria-hidden',\s*hideHud \? 'true' : 'false'\)/)
+  })
+
+  it('calls syncChrome from every phase transition so the HUD re-syncs on Start/Pause/Resume/Restart', () => {
+    for (const fn of ['startGame', 'pauseGame', 'resumeGame', 'restartToTitle']) {
+      const body = mainTsSource.match(new RegExp(`function ${fn}\\(\\) \\{[\\s\\S]*?\\n\\}`))?.[0] ?? ''
+      expect(body, `${fn} should exist`).not.toBe('')
+      expect(body, `${fn} should call syncChrome()`).toMatch(/syncChrome\(\)/)
+    }
+  })
+
+  it('keeps the global [hidden] rule forcing display:none so a hidden HUD is actually invisible', () => {
+    const cssWithoutComments = styleCss.replace(/\/\*[\s\S]*?\*\//g, '')
+    expect(cssWithoutComments).toMatch(/\[hidden\]\s*\{[^}]*display:\s*none\s*!important/)
+  })
+
+  it('still ships the title-screen Mute control inside the HUD markup (so hiding #hud covers it)', () => {
+    const hudMarkup = indexHtml.match(/<div id="hud">[\s\S]*?\n {6}<\/div>/)?.[0] ?? ''
+    expect(hudMarkup).not.toBe('')
+    expect(hudMarkup).toMatch(/id="btn-mute"/)
+    expect(hudMarkup).toMatch(/id="score"/)
+  })
+})

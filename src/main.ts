@@ -37,6 +37,7 @@ const canvas = document.getElementById('game') as HTMLCanvasElement
 const ctx = canvas.getContext('2d')!
 const overlay = document.getElementById('overlay') as HTMLDivElement
 const pauseOverlay = document.getElementById('pause-overlay') as HTMLDivElement
+const hud = document.getElementById('hud') as HTMLDivElement
 const btnStart = document.getElementById('btn-start') as HTMLButtonElement
 const btnResume = document.getElementById('btn-resume') as HTMLButtonElement
 const btnRestart = document.getElementById('btn-restart') as HTMLButtonElement
@@ -296,6 +297,14 @@ function setOverlayHidden(el: HTMLElement, hidden: boolean) {
 }
 
 function syncChrome() {
+  if (hud) {
+    // Title overlay sits above the HUD with a translucent background, so score/hint/Mute
+    // stayed visible-but-covered and still reachable by Tab/AT. Fully hide the HUD while
+    // the title is open so there's no ghost score or inert-looking Mute control underneath.
+    const hideHud = phase === 'title'
+    hud.toggleAttribute('hidden', hideHud)
+    hud.setAttribute('aria-hidden', hideHud ? 'true' : 'false')
+  }
   if (btnPause) {
     const show = phase === 'playing' || phase === 'paused'
     btnPause.hidden = !show
