@@ -209,7 +209,11 @@ kbd {
 #btn-resume:active,
 #btn-restart:active { transform: scale(0.98); }
 
-:focus { outline: none; }
+/* Keep scripted focus visible too, including after pointer input. */
+#btn-start:focus,
+#btn-resume:focus,
+#btn-restart:focus,
+.hud-btn:focus,
 :focus-visible {
   outline: 3px solid #ffe066;
   outline-offset: 3px;
