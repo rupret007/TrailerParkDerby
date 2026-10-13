@@ -1,4 +1,5 @@
 import './style.css'
+import { drawPlayerLabel, rotatedBounds } from './playerLabel'
 import {
   applySoftTrackPull,
   clampDt,
@@ -1252,6 +1253,11 @@ function drawTrailer() {
   ctx.fillRect(bedX + trailer.bedL - 28, trailer.bedW / 2 - 2, 16, 7)
 
   ctx.restore()
+  // Use the actual drawn deck span to keep the player badge off the target.
+  return rotatedBounds(pose, {
+    left: bedX, right: bedX + trailer.bedL,
+    top: -trailer.bedW / 2 - 3, bottom: trailer.bedW / 2 + 3,
+  })
 }
 
 function roundRect(x: number, y: number, w: number, h: number, r: number) {
@@ -1375,11 +1381,12 @@ function frame(ts: number) {
     ctx.translate((Math.random() - 0.5) * mag, (Math.random() - 0.5) * mag)
   }
   drawTrack()
-  drawTrailer()
+  const bedBounds = drawTrailer()
   drawBoosts(ts)
   for (const c of aiCars) drawCar(c)
   drawCar(player)
   drawSparks()
+  drawPlayerLabel(ctx, player, bedBounds, canvas.clientWidth / W)
   ctx.restore()
   drawHudOverlay()
 
