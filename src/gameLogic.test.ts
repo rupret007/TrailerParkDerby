@@ -375,3 +375,34 @@ describe('HUD hidden behind the title overlay (score/hint/Mute must not be a gho
     expect(hudMarkup).toMatch(/id="score"/)
   })
 })
+
+describe('HUD controls off the racing line (T07)', () => {
+  it('anchors Pause/Mute in the top corner instead of the centered score stack', () => {
+    const css = styleCss.replace(/\/\*[\s\S]*?\*\//g, '')
+    const actionsRule = css.match(/#hud-actions\s*\{[^}]*\}/)?.[0] ?? ''
+    expect(actionsRule).not.toBe('')
+    expect(actionsRule).toMatch(/position:\s*absolute/)
+    expect(actionsRule).not.toMatch(/position:\s*static/)
+    expect(actionsRule).toMatch(/right:/)
+  })
+
+  it('uses a full-width HUD bar so score stays centered while actions sit in the corner', () => {
+    const css = styleCss.replace(/\/\*[\s\S]*?\*\//g, '')
+    const hudRule = css.match(/#hud\s*\{[^}]*\}/)?.[0] ?? ''
+    expect(hudRule).not.toBe('')
+    expect(hudRule).toMatch(/left:\s*0/)
+    expect(hudRule).toMatch(/right:\s*0/)
+    expect(hudRule).not.toMatch(/translateX\(-50%\)/)
+  })
+
+  it('moves corner status into HTML on phone landscape so it clears the steer column', () => {
+    expect(indexHtml).toMatch(/id="play-status"/)
+    const css = styleCss.replace(/\/\*[\s\S]*?\*\//g, '')
+    expect(css).toMatch(/body\.mode-mobile\.landscape\s+#play-status:not\(\[hidden\]\)/)
+    expect(mainTsSource).toMatch(/function shouldUseHtmlPlayStatus\(\)/)
+    expect(mainTsSource).toMatch(/syncPlayStatusOverlay\(\)/)
+    const drawHud =
+      mainTsSource.match(/function drawHudOverlay\(\) \{[\s\S]*?\n\}/)?.[0] ?? ''
+    expect(drawHud).toMatch(/shouldUseHtmlPlayStatus\(\)/)
+  })
+})
