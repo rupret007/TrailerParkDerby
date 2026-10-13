@@ -50,4 +50,14 @@ describe('title dialog and action focus', () => {
     })
     expect(outline).toBe('3px solid #ffe066')
   })
+
+  it('does not paint the yellow action ring on the gameplay canvas after resume focus', () => {
+    const outlines = new Set<string>()
+    parse(styleCss).walkRules((rule) => {
+      if (!rule.selectors.includes('#game:focus') && !rule.selectors.includes('#game:focus-visible')) return
+      rule.walkDecls('outline', (decl) => { outlines.add(decl.value) })
+    })
+    expect(outlines.has('none')).toBe(true)
+    expect(outlines.has('3px solid #ffe066')).toBe(false)
+  })
 })

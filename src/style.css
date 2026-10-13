@@ -255,6 +255,12 @@ kbd {
   outline-offset: 3px;
 }
 
+/* Resume focuses #game for driving keys. Do not wrap the oval in the action ring. */
+#game:focus,
+#game:focus-visible {
+  outline: none;
+}
+
 /* Default howto visibility — JS toggles body.mode-* */
 .howto-mobile { display: none; }
 body.mode-mobile .howto-desktop { display: none; }
