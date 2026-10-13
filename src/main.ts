@@ -1,4 +1,5 @@
 import './style.css'
+import { drawPlayerLabel, rotatedBounds } from './playerLabel'
 import {
   applySoftTrackPull,
   clampDt,
@@ -41,13 +42,14 @@ const canvas = document.getElementById('game') as HTMLCanvasElement
 const ctx = canvas.getContext('2d')!
 const overlay = document.getElementById('overlay') as HTMLDivElement
 const pauseOverlay = document.getElementById('pause-overlay') as HTMLDivElement
+const hud = document.getElementById('hud') as HTMLDivElement
 const btnStart = document.getElementById('btn-start') as HTMLButtonElement
 const btnResume = document.getElementById('btn-resume') as HTMLButtonElement
 const btnRestart = document.getElementById('btn-restart') as HTMLButtonElement
 const btnPause = document.getElementById('btn-pause') as HTMLButtonElement
 const btnMute = document.getElementById('btn-mute') as HTMLButtonElement
-const hud = document.getElementById('hud') as HTMLDivElement
 const hudActions = document.getElementById('hud-actions') as HTMLDivElement
+const playStatusEl = document.getElementById('play-status') as HTMLDivElement | null
 const scoreEl = document.getElementById('score') as HTMLSpanElement
 const comboEl = document.getElementById('combo') as HTMLSpanElement
 const bestEl = document.getElementById('best') as HTMLSpanElement
@@ -301,9 +303,43 @@ function setOverlayHidden(el: HTMLElement, hidden: boolean) {
   else el.removeAttribute('hidden')
 }
 
+function shouldUseHtmlPlayStatus(): boolean {
+  return document.body.classList.contains('mode-mobile') && document.body.classList.contains('landscape')
+}
+
+function cornerStatusLine(): string {
+  const bits = [
+    neonNight ? 'NEON' : 'DAY',
+    muted ? 'MUTE' : 'SFX',
+    boostRemain > 0 ? 'BOOST' : '',
+    phase === 'playing' ? comboTitle(combo) : '',
+  ].filter(Boolean)
+  return bits.join(' · ')
+}
+
+function syncPlayStatusOverlay() {
+  if (!playStatusEl) return
+  const hide = phase === 'title' || !shouldUseHtmlPlayStatus()
+  if (hide) {
+    playStatusEl.hidden = true
+    playStatusEl.setAttribute('aria-hidden', 'true')
+    playStatusEl.textContent = ''
+    return
+  }
+  playStatusEl.hidden = false
+  playStatusEl.setAttribute('aria-hidden', 'true')
+  playStatusEl.textContent = cornerStatusLine()
+}
+
 function syncChrome() {
   const policy = pauseHudPolicy(phase)
   if (hud) {
+    // Title overlay sits above the HUD with a translucent background, so score/hint/Mute
+    // stayed visible-but-covered and still reachable by Tab/AT. Fully hide the HUD while
+    // the title is open so there's no ghost score or inert-looking Mute control underneath.
+    const hideHud = phase === 'title'
+    hud.toggleAttribute('hidden', hideHud)
+    hud.setAttribute('aria-hidden', hideHud ? 'true' : 'false')
     if (policy.hudInert) hud.setAttribute('inert', '')
     else hud.removeAttribute('inert')
   }
@@ -327,6 +363,7 @@ function syncChrome() {
     btnMute.textContent = muted ? 'Unmute' : 'Mute'
     btnMute.setAttribute('aria-label', muted ? 'Unmute sound' : 'Mute sound')
   }
+  syncPlayStatusOverlay()
 }
 
 function ensureAudio() {
@@ -1280,6 +1317,11 @@ function drawTrailer() {
   ctx.fillRect(bedX + trailer.bedL - 28, trailer.bedW / 2 - 2, 16, 7)
 
   ctx.restore()
+  // Use the actual drawn deck span to keep the player badge off the target.
+  return rotatedBounds(pose, {
+    left: bedX, right: bedX + trailer.bedL,
+    top: -trailer.bedW / 2 - 3, bottom: trailer.bedW / 2 + 3,
+  })
 }
 
 function roundRect(x: number, y: number, w: number, h: number, r: number) {
@@ -1362,16 +1404,13 @@ function drawHudOverlay() {
     ctx.fillText(message, CX, H - 36)
   }
 
-  // corner status
+  syncPlayStatusOverlay()
+  if (shouldUseHtmlPlayStatus()) return
+
+  // corner status (desktop / portrait — clear of side steer rails)
+  const status = cornerStatusLine()
   ctx.font = '12px sans-serif'
   ctx.textAlign = 'left'
-  const bits = [
-    neonNight ? 'NEON' : 'DAY',
-    muted ? 'MUTE' : 'SFX',
-    boostRemain > 0 ? 'BOOST' : '',
-    phase === 'playing' ? comboTitle(combo) : '',
-  ].filter(Boolean)
-  const status = bits.join(' · ')
   const sw = ctx.measureText(status).width + 16
   ctx.fillStyle = 'rgba(0,0,0,0.62)'
   ctx.fillRect(10, H - 28, sw, 20)
@@ -1403,11 +1442,12 @@ function frame(ts: number) {
     ctx.translate((Math.random() - 0.5) * mag, (Math.random() - 0.5) * mag)
   }
   drawTrack()
-  drawTrailer()
+  const bedBounds = drawTrailer()
   drawBoosts(ts)
   for (const c of aiCars) drawCar(c)
   drawCar(player)
   drawSparks()
+  drawPlayerLabel(ctx, player, bedBounds, canvas.clientWidth / W)
   ctx.restore()
   drawHudOverlay()
 

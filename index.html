@@ -12,7 +12,7 @@
   </head>
   <body>
     <div id="app">
-      <canvas id="game" width="960" height="640" tabindex="-1" role="img" aria-label="Trailer Park Derby race track"></canvas>
+      <canvas id="game" width="960" height="640" tabindex="-1" role="img" aria-label="Trailer Park Derby race track. You control the silver car labeled You."></canvas>
       <div id="hud">
         <div id="score-line">Score: <span id="score">0</span> · Combo x<span id="combo">1</span> · Best: <span id="best">0</span></div>
         <div id="hint">Park on the moving trailer · hold ~1.5s</div>
@@ -22,6 +22,7 @@
           <button type="button" id="btn-mute" class="hud-btn" aria-pressed="false" aria-label="Mute sound">Mute</button>
         </div>
       </div>
+      <div id="play-status" class="play-status" hidden aria-hidden="true"></div>
       <div id="announce" class="sr-only" aria-live="polite"></div>
 
       <!-- Mobile / touch only — hidden on desktop keyboard play -->
@@ -38,22 +39,23 @@
       </div>
 
       <div id="overlay" class="overlay">
-        <div class="panel" id="title-panel">
-          <h1>TrailerParkDerby</h1>
+        <div class="panel" id="title-panel" role="dialog" aria-labelledby="title-heading">
+          <h1 id="title-heading">TrailerParkDerby</h1>
           <p class="tagline" id="tagline">Oval night race · park the moving flatbed</p>
           <ul class="howto howto-desktop">
             <li><kbd>W</kbd>/<kbd>↑</kbd> accelerate · <kbd>S</kbd>/<kbd>↓</kbd> brake</li>
             <li><kbd>A</kbd>/<kbd>D</kbd> or ←/→ steer · <kbd>Space</kbd> handbrake</li>
             <li>Drive onto the <strong>moving trailer</strong> bed and stay parked ~1.5s to score</li>
-            <li>Fall off / miss = retry · grab neon <strong>boost</strong> orbs</li>
-            <li><kbd>N</kbd> neon · <kbd>M</kbd> mute · <kbd>H</kbd> horn · <kbd>Enter</kbd> start · <kbd>Esc</kbd> pause</li>
-            <li>Perfect park (centered + slow) stacks bonus · near-miss AI for points</li>
+            <li>A miss <strong>breaks combo</strong> — you stay on the track</li>
+            <li><kbd>R</kbd> reset car · <kbd>N</kbd> neon · <kbd>M</kbd> mute · <kbd>H</kbd> horn · <kbd>Enter</kbd> start · <kbd>Esc</kbd> pause</li>
+            <li>Grab neon <strong>boost</strong> orbs · Perfect park (centered + slow) stacks bonus · near-miss AI for points</li>
           </ul>
           <ul class="howto howto-mobile">
             <li><strong>Left pads</strong> steer · <strong>Right pads</strong> Gas / Brake / Handbrake</li>
             <li>Hold Gas + steer together — multi-touch is supported</li>
             <li>Drive onto the <strong>moving trailer</strong> and stay parked ~1.5s to score</li>
-            <li>Perfect park (centered + slow) stacks bonus · skim AI for near-miss points</li>
+            <li>A miss <strong>breaks combo</strong> — you stay on the track</li>
+            <li>Grab neon <strong>boost</strong> orbs · Perfect park (centered + slow) stacks bonus · skim AI for near-miss points</li>
             <li>Landscape works best · tap Start to unlock sound · double-tap Gas quickly to honk</li>
           </ul>
           <button id="btn-start" type="button">START ENGINE</button>
