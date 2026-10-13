@@ -58,7 +58,8 @@ body.mode-mobile.landscape #game {
   top: max(8px, env(safe-area-inset-top));
   left: 0;
   right: 0;
-  z-index: 4;
+  /* above #touch-pad so Pause/Mute stay tappable even near the rails */
+  z-index: 7;
   pointer-events: none;
   text-align: center;
   color: #f2f7ff;
@@ -114,6 +115,11 @@ body.mode-mobile.landscape #hud {
   /* keep the score pill clear of the top arc on short landscape viewports */
   padding-left: max(8px, env(safe-area-inset-left));
   padding-right: calc(min(22vw, 140px) + 8px);
+}
+
+body.mode-mobile.landscape #hud-actions {
+  /* padding on #hud does not shift this abspos cluster; clear the 140px GAS rail */
+  right: calc(min(22vw, 140px) + 8px);
 }
 
 body.mode-mobile.landscape #hint {
