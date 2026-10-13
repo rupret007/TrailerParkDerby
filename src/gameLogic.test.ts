@@ -375,3 +375,95 @@ describe('HUD hidden behind the title overlay (score/hint/Mute must not be a gho
     expect(hudMarkup).toMatch(/id="score"/)
   })
 })
+
+describe('HUD controls off the racing line (T07)', () => {
+  const cssWithoutComments = () => styleCss.replace(/\/\*[\s\S]*?\*\//g, '')
+
+  it('anchors Pause/Mute in the top corner instead of the centered score stack', () => {
+    const css = cssWithoutComments()
+    const actionsRule = css.match(/#hud-actions\s*\{[^}]*\}/)?.[0] ?? ''
+    expect(actionsRule).not.toBe('')
+    expect(actionsRule).toMatch(/position:\s*absolute/)
+    expect(actionsRule).not.toMatch(/position:\s*static/)
+    expect(actionsRule).toMatch(/right:/)
+  })
+
+  it('uses a full-width HUD bar so score stays centered while actions sit in the corner', () => {
+    const css = cssWithoutComments()
+    const hudRule = css.match(/#hud\s*\{[^}]*\}/)?.[0] ?? ''
+    expect(hudRule).not.toBe('')
+    expect(hudRule).toMatch(/left:\s*0/)
+    expect(hudRule).toMatch(/right:\s*0/)
+    expect(hudRule).not.toMatch(/translateX\(-50%\)/)
+  })
+
+  it('insets Pause/Mute past the landscape GAS/BRAKE rail (same width token as the pad cluster)', () => {
+    const css = cssWithoutComments()
+    const landscapeActions =
+      css.match(/body\.mode-mobile\.landscape\s+#hud-actions\s*\{[^}]*\}/)?.[0] ?? ''
+    expect(landscapeActions).not.toBe('')
+    expect(landscapeActions).toMatch(/right:\s*calc\(\s*min\(22vw,\s*140px\)\s*\+\s*8px\s*\)/)
+    const padRail =
+      css.match(
+        /body\.mode-mobile\.landscape\s+\.pad-left-cluster,\s*body\.mode-mobile\.landscape\s+\.pad-right-cluster\s*\{[^}]*\}/,
+      )?.[0] ?? ''
+    expect(padRail).not.toBe('')
+    expect(padRail).toMatch(/width:\s*min\(22vw,\s*140px\)/)
+    expect(padRail).toMatch(/height:\s*100%/)
+  })
+
+  it('stacks the HUD above the touch pads so Pause/Mute are not under GAS/BRAKE chrome', () => {
+    const css = cssWithoutComments()
+    const hudRule = css.match(/#hud\s*\{[^}]*\}/)?.[0] ?? ''
+    const padRule = css.match(/#touch-pad\s*\{[^}]*\}/)?.[0] ?? ''
+    const hudZ = Number(hudRule.match(/z-index:\s*(\d+)/)?.[1])
+    const padZ = Number(padRule.match(/z-index:\s*(\d+)/)?.[1])
+    expect(hudZ).toBeGreaterThan(0)
+    expect(padZ).toBeGreaterThan(0)
+    expect(hudZ).toBeGreaterThan(padZ)
+  })
+
+  it('keeps the 44px Pause/Mute pair clear of the right rail at 844×390 landscape', () => {
+    const css = cssWithoutComments()
+    const landscapeActions =
+      css.match(/body\.mode-mobile\.landscape\s+#hud-actions\s*\{[^}]*\}/)?.[0] ?? ''
+    const rightExpr = landscapeActions.match(/right:\s*([^;]+);/)?.[1] ?? ''
+    const minTok = rightExpr.match(/min\((\d+(?:\.\d+)?)vw,\s*(\d+(?:\.\d+)?)px\)/)
+    const extraPx = Number(rightExpr.match(/\+\s*(\d+(?:\.\d+)?)px/)?.[1])
+    expect(minTok).not.toBeNull()
+    expect(Number.isFinite(extraPx)).toBe(true)
+    const hudBtn = css.match(/\.hud-btn\s*\{[^}]*\}/)?.[0] ?? ''
+    const gap = Number(
+      (css.match(/#hud-actions\s*\{[^}]*\}/)?.[0] ?? '').match(/gap:\s*(\d+(?:\.\d+)?)px/)?.[1],
+    )
+    const minBtn = Number(hudBtn.match(/min-width:\s*(\d+(?:\.\d+)?)px/)?.[1])
+    expect(minBtn).toBeGreaterThanOrEqual(44)
+    expect(gap).toBeGreaterThan(0)
+    const viewportW = 844
+    const railW = Math.min((Number(minTok![1]) / 100) * viewportW, Number(minTok![2]))
+    const inset = railW + extraPx
+    const pairW = minBtn * 2 + gap
+    const actionsRight = viewportW - inset
+    const railLeft = viewportW - railW
+    expect(actionsRight).toBeLessThanOrEqual(railLeft)
+    expect(actionsRight - pairW).toBeGreaterThanOrEqual(0)
+  })
+
+  it('moves corner status into HTML on phone landscape so it clears the steer column', () => {
+    expect(indexHtml).toMatch(/id="play-status"/)
+    const css = cssWithoutComments()
+    expect(css).toMatch(/body\.mode-mobile\.landscape\s+#play-status:not\(\[hidden\]\)/)
+    expect(mainTsSource).toMatch(/function shouldUseHtmlPlayStatus\(\)/)
+    expect(mainTsSource).toMatch(/syncPlayStatusOverlay\(\)/)
+    const drawHud =
+      mainTsSource.match(/function drawHudOverlay\(\) \{[\s\S]*?\n\}/)?.[0] ?? ''
+    expect(drawHud).not.toBe('')
+    expect(drawHud).toMatch(/syncPlayStatusOverlay\(\)/)
+    expect(drawHud).toMatch(/if \(shouldUseHtmlPlayStatus\(\)\) return/)
+    const returnAt = drawHud.indexOf('if (shouldUseHtmlPlayStatus()) return')
+    const canvasStatusFill = drawHud.search(/fillRect\(\s*10,\s*H\s*-\s*28/)
+    expect(returnAt).toBeGreaterThan(-1)
+    expect(canvasStatusFill).toBeGreaterThan(returnAt)
+    expect(drawHud.indexOf('syncPlayStatusOverlay()')).toBeLessThan(returnAt)
+  })
+})

@@ -43,6 +43,7 @@ const btnResume = document.getElementById('btn-resume') as HTMLButtonElement
 const btnRestart = document.getElementById('btn-restart') as HTMLButtonElement
 const btnPause = document.getElementById('btn-pause') as HTMLButtonElement
 const btnMute = document.getElementById('btn-mute') as HTMLButtonElement
+const playStatusEl = document.getElementById('play-status') as HTMLDivElement | null
 const scoreEl = document.getElementById('score') as HTMLSpanElement
 const comboEl = document.getElementById('combo') as HTMLSpanElement
 const bestEl = document.getElementById('best') as HTMLSpanElement
@@ -296,6 +297,34 @@ function setOverlayHidden(el: HTMLElement, hidden: boolean) {
   else el.removeAttribute('hidden')
 }
 
+function shouldUseHtmlPlayStatus(): boolean {
+  return document.body.classList.contains('mode-mobile') && document.body.classList.contains('landscape')
+}
+
+function cornerStatusLine(): string {
+  const bits = [
+    neonNight ? 'NEON' : 'DAY',
+    muted ? 'MUTE' : 'SFX',
+    boostRemain > 0 ? 'BOOST' : '',
+    phase === 'playing' ? comboTitle(combo) : '',
+  ].filter(Boolean)
+  return bits.join(' · ')
+}
+
+function syncPlayStatusOverlay() {
+  if (!playStatusEl) return
+  const hide = phase === 'title' || !shouldUseHtmlPlayStatus()
+  if (hide) {
+    playStatusEl.hidden = true
+    playStatusEl.setAttribute('aria-hidden', 'true')
+    playStatusEl.textContent = ''
+    return
+  }
+  playStatusEl.hidden = false
+  playStatusEl.setAttribute('aria-hidden', 'true')
+  playStatusEl.textContent = cornerStatusLine()
+}
+
 function syncChrome() {
   if (hud) {
     // Title overlay sits above the HUD with a translucent background, so score/hint/Mute
@@ -317,6 +346,7 @@ function syncChrome() {
     btnMute.textContent = muted ? 'Unmute' : 'Mute'
     btnMute.setAttribute('aria-label', muted ? 'Unmute sound' : 'Mute sound')
   }
+  syncPlayStatusOverlay()
 }
 
 function ensureAudio() {
@@ -1334,16 +1364,13 @@ function drawHudOverlay() {
     ctx.fillText(message, CX, H - 36)
   }
 
-  // corner status
+  syncPlayStatusOverlay()
+  if (shouldUseHtmlPlayStatus()) return
+
+  // corner status (desktop / portrait — clear of side steer rails)
+  const status = cornerStatusLine()
   ctx.font = '12px sans-serif'
   ctx.textAlign = 'left'
-  const bits = [
-    neonNight ? 'NEON' : 'DAY',
-    muted ? 'MUTE' : 'SFX',
-    boostRemain > 0 ? 'BOOST' : '',
-    phase === 'playing' ? comboTitle(combo) : '',
-  ].filter(Boolean)
-  const status = bits.join(' · ')
   const sw = ctx.measureText(status).width + 16
   ctx.fillStyle = 'rgba(0,0,0,0.62)'
   ctx.fillRect(10, H - 28, sw, 20)

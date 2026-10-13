@@ -56,10 +56,10 @@ body.mode-mobile.landscape #game {
 #hud {
   position: absolute;
   top: max(8px, env(safe-area-inset-top));
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(92vw, 920px);
-  z-index: 4;
+  left: 0;
+  right: 0;
+  /* above #touch-pad so Pause/Mute stay tappable even near the rails */
+  z-index: 7;
   pointer-events: none;
   text-align: center;
   color: #f2f7ff;
@@ -78,12 +78,48 @@ body.mode-mobile.landscape #game {
 #hint { font-size: clamp(11px, 2.6vw, 13px); opacity: 0.95; margin-top: 4px; }
 
 #hud-actions {
-  position: static;
+  position: absolute;
+  top: 0;
+  right: max(8px, env(safe-area-inset-right));
   display: flex;
-  justify-content: center;
+  justify-content: flex-end;
   gap: 8px;
-  margin-top: 6px;
   pointer-events: auto;
+}
+
+#play-status {
+  display: none;
+  position: fixed;
+  z-index: 4;
+  pointer-events: none;
+  left: calc(min(22vw, 140px) + 10px);
+  bottom: max(8px, env(safe-area-inset-bottom));
+  max-width: calc(100vw - 2 * min(22vw, 140px) - 28px);
+  font-size: 12px;
+  line-height: 1.35;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #e8f2ff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+
+body.mode-mobile.landscape #play-status:not([hidden]) {
+  display: block;
+}
+
+body.mode-mobile.landscape #hud {
+  /* keep the score pill clear of the top arc on short landscape viewports */
+  padding-left: max(8px, env(safe-area-inset-left));
+  padding-right: calc(min(22vw, 140px) + 8px);
+}
+
+body.mode-mobile.landscape #hud-actions {
+  /* padding on #hud does not shift this abspos cluster; clear the 140px GAS rail */
+  right: calc(min(22vw, 140px) + 8px);
 }
 
 body.mode-mobile.landscape #hint {
