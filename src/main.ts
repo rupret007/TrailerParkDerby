@@ -529,7 +529,11 @@ btnPause?.addEventListener('click', () => {
   if (phase === 'playing') pauseGame()
   else if (phase === 'paused') resumeGame()
 })
-btnMute?.addEventListener('click', toggleMute)
+btnMute?.addEventListener('click', () => {
+  toggleMute()
+  // Finish the HUD action in gameplay so the next Space press is a handbrake.
+  if (phase === 'playing') canvas.focus({ preventScroll: true })
+})
 
 document.addEventListener('keydown', (e) => {
   if (phase !== 'paused' || e.key !== 'Tab') return
@@ -549,8 +553,14 @@ document.addEventListener('focusin', (e) => {
 })
 
 window.addEventListener('keydown', (e) => {
-  const onUi = e.target instanceof HTMLElement && !!e.target.closest('button, a, input, textarea')
-  if (!onUi) {
+  const uiTarget = e.target instanceof HTMLElement ? e.target.closest('button, a, input, textarea') : null
+  const onUi = !!uiTarget
+  // WASD/arrows express driving intent even while a HUD button has focus.
+  // Leave Enter/Space native until driving resumes or the button is activated.
+  const driveFromHud = phase === 'playing' && (uiTarget === btnMute || uiTarget === btnPause)
+    && ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)
+  if (!onUi || driveFromHud) {
+    if (driveFromHud) canvas.focus({ preventScroll: true })
     keys.add(e.code)
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
       e.preventDefault()
