@@ -566,7 +566,9 @@ window.addEventListener('keydown', (e) => {
     }
     return
   }
-  if ((e.code === 'KeyP' || e.code === 'KeyPause') && !onUi) {
+  // Pause moves focus to Resume; keep the shortcut available on either dialog action.
+  const onPauseAction = phase === 'paused' && (e.target === btnResume || e.target === btnRestart)
+  if ((e.code === 'KeyP' || e.code === 'KeyPause') && (!onUi || onPauseAction)) {
     if (phase === 'playing') pauseGame()
     else if (phase === 'paused') resumeGame()
   }
