@@ -8,11 +8,15 @@ import readme from '../README.md?raw'
 async function boot() {
   vi.resetModules()
   vi.useFakeTimers()
+  type Modifiers = Partial<Pick<KeyboardEvent, 'ctrlKey' | 'metaKey' | 'altKey'>>
   type TestEvent = {
     target: TestElement
     code: string
     key: string
     shiftKey: boolean
+    ctrlKey: boolean
+    metaKey: boolean
+    altKey: boolean
     defaultPrevented: boolean
     preventDefault(): void
   }
@@ -86,9 +90,10 @@ async function boot() {
     innerWidth: 960, innerHeight: 640,
     matchMedia: () => ({ matches: false, addEventListener() {} }),
   })
-  function event(target = doc.activeElement!, code = '', shiftKey = false): TestEvent {
+  function event(target = doc.activeElement!, code = '', shiftKey = false, modifiers: Modifiers = {}): TestEvent {
     return {
       target, code, key: code, shiftKey, defaultPrevented: false,
+      ctrlKey: false, metaKey: false, altKey: false, ...modifiers,
       preventDefault() { this.defaultPrevented = true },
     }
   }
@@ -100,16 +105,16 @@ async function boot() {
   vi.stubGlobal('requestAnimationFrame', vi.fn(() => 1))
   await import('./main')
   const click = (id: string) => get(id).emit('click', event(get(id)))
-  const key = (code: string, type = 'keydown', shiftKey = false) => {
-    const e = event(doc.activeElement!, code, shiftKey)
+  const key = (code: string, type = 'keydown', shiftKey = false, modifiers: Modifiers = {}) => {
+    const e = event(doc.activeElement!, code, shiftKey, modifiers)
     e.target.emit(type, e)
     doc.emit(type, e)
     win.emit(type, e)
     return e
   }
-  const press = (code: string, shiftKey = false) => {
-    const down = key(code, 'keydown', shiftKey)
-    key(code, 'keyup', shiftKey)
+  const press = (code: string, shiftKey = false, modifiers: Modifiers = {}) => {
+    const down = key(code, 'keydown', shiftKey, modifiers)
+    key(code, 'keyup', shiftKey, modifiers)
     return down
   }
   click('btn-start')
@@ -132,6 +137,33 @@ afterEach(() => {
 })
 
 describe('pause shortcuts through the installed input handlers', () => {
+  it.each(['ctrlKey', 'metaKey', 'altKey'] as const)('leaves %s + P to the browser without changing game phase or focus', async (modifier) => {
+    const h = await boot()
+    expect(h.press('KeyP', false, { [modifier]: true }).defaultPrevented).toBe(false)
+    expect(h.paused()).toBe(false)
+    expect(h.active()).toBe('game')
+    h.press('KeyP')
+    expect(h.paused()).toBe(true)
+    for (const action of ['btn-resume', 'btn-restart']) {
+      h.get(action).focus()
+      expect(h.press('KeyP', false, { [modifier]: true }).defaultPrevented).toBe(false)
+      expect(h.paused()).toBe(true)
+      expect(h.active()).toBe(action)
+    }
+    h.press('KeyP')
+    expect(h.paused()).toBe(false)
+    expect(h.active()).toBe('game')
+  })
+
+  it('keeps Shift + P available as the uppercase pause shortcut', async () => {
+    const h = await boot()
+    h.press('KeyP', true)
+    expect(h.paused()).toBe(true)
+    h.press('KeyP', true)
+    expect(h.paused()).toBe(false)
+    expect(h.active()).toBe('game')
+  })
+
   it.each(['btn-resume', 'btn-restart'])('P → keyup → P resumes from %s', async (action) => {
     const h = await boot()
     h.press('KeyP')
