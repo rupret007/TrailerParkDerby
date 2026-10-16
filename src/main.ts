@@ -556,6 +556,8 @@ window.addEventListener('keydown', (e) => {
       e.preventDefault()
     }
   }
+  // Keep held driving input above; toggles and retry act once per physical press.
+  if (e.repeat && ['Escape', 'KeyP', 'KeyPause', 'KeyM', 'KeyN', 'KeyR'].includes(e.code)) return
   if (e.code === 'Escape') {
     if (phase === 'playing') {
       e.preventDefault()
