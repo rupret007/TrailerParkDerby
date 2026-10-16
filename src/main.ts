@@ -564,14 +564,14 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Escape') {
     if (phase === 'playing') {
       e.preventDefault()
-      pauseGame()
+      if (!e.repeat) pauseGame()
     } else if (phase === 'paused') {
       e.preventDefault()
-      resumeGame()
+      if (!e.repeat) resumeGame()
     }
     return
   }
-  if ((e.code === 'KeyP' || e.code === 'KeyPause') && !onUi) {
+  if ((e.code === 'KeyP' || e.code === 'Pause' || e.code === 'KeyPause') && !onUi && !e.repeat) {
     if (phase === 'playing') pauseGame()
     else if (phase === 'paused') resumeGame()
   }

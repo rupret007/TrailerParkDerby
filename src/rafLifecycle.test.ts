@@ -93,6 +93,7 @@ async function boot() {
   return {
     pending, clock, player, trailer, fillRect, paintFrame,
     click: (id: string) => get(id).dispatchEvent(new Event('click')),
+    keydown: (code: string, repeat = false) => win.dispatchEvent(Object.assign(new Event('keydown'), { code, repeat })),
     escape: () => win.dispatchEvent(Object.assign(new Event('keydown'), { code: 'Escape' })),
     blur: () => win.dispatchEvent(new Event('blur')),
     visibility: (hidden: boolean) => {
@@ -120,6 +121,33 @@ afterEach(() => {
 })
 
 describe('animation scheduling through production phase handlers', () => {
+  it.each(['Escape', 'KeyP', 'Pause', 'KeyPause'])('keeps gameplay frozen while %s is held and resumes once on a new press', async (code) => {
+    const h = await boot()
+    h.click('btn-start')
+    h.tick()
+    h.keydown(code)
+    expect(h.pending.size).toBe(0)
+    h.player.mockClear()
+    h.clock.mockClear()
+    h.paintFrame.mockClear()
+    for (let i = 0; i < 4; i++) {
+      h.keydown(code, true)
+      h.tick(250)
+      expect(h.pending.size).toBe(0)
+    }
+    expect(h.player).not.toHaveBeenCalled()
+    expect(h.clock).not.toHaveBeenCalled()
+    expect(h.paintFrame).not.toHaveBeenCalled()
+    h.keydown(code)
+    h.keydown(code, true)
+    expect(h.pending.size).toBe(1)
+    h.tick(20)
+    expect(h.clock.mock.calls).toEqual([[0.02]])
+    expect(h.player).toHaveBeenCalledTimes(1)
+    expect(h.paintFrame).toHaveBeenCalledTimes(1)
+    expect(h.pending.size).toBe(1)
+  })
+
   it('keeps one callback when Start is clicked before the first title frame', async () => {
     const h = await boot()
     expect(h.pending.size).toBe(1)
