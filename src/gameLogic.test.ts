@@ -36,6 +36,8 @@ import {
   pointOnTrack,
   shouldResetComboOnMiss,
   stepPlayer,
+  TRAILER_BED_CAB_GAP,
+  trailerBedLocalX,
   stepTrailerProgress,
   tangentOnTrack,
   tickBoostRemain,
@@ -124,8 +126,24 @@ describe('trailer bed + park scoring', () => {
   const pose = { x: 400, y: 300, angle: 0 }
   const trailer = DEFAULT_TRAILER
 
+  it('shares one cab-gap with the drawn deck so hit-test edges match the art', () => {
+    expect(TRAILER_BED_CAB_GAP).toBe(0.12)
+    const { start, end, mid } = trailerBedLocalX(trailer)
+    expect(start).toBeCloseTo(-(trailer.cabL * 0.12))
+    expect(end).toBeCloseTo(start - trailer.bedL)
+    expect(mid).toBeCloseTo(start - trailer.bedL / 2)
+    // Cab-side lip of the painted deck is in; a step toward the cab is not.
+    expect(pointInTrailerBed(pose.x + start - 0.01, pose.y, pose, trailer)).toBe(true)
+    expect(pointInTrailerBed(pose.x + start + 0.01, pose.y, pose, trailer)).toBe(false)
+    // Tail of the painted deck is in; a step past the tail is not.
+    expect(pointInTrailerBed(pose.x + end + 0.01, pose.y, pose, trailer)).toBe(true)
+    expect(pointInTrailerBed(pose.x + end - 0.01, pose.y, pose, trailer)).toBe(false)
+    expect(mainTsSource).toMatch(/const bedX = trailerBedLocalX\(trailer\)\.end/)
+    expect(mainTsSource).not.toMatch(/-trailer\.cabL \* 0\.1[25]/)
+  })
+
   it('accepts the bed center and rejects the cab / sides', () => {
-    const bedMidX = -(trailer.cabL * 0.15 + trailer.bedL / 2)
+    const bedMidX = trailerBedLocalX(trailer).mid
     expect(pointInTrailerBed(pose.x + bedMidX, pose.y, pose, trailer)).toBe(true)
     expect(pointInTrailerBed(pose.x + 20, pose.y, pose, trailer)).toBe(false)
     expect(pointInTrailerBed(pose.x + bedMidX, pose.y + 40, pose, trailer)).toBe(false)
@@ -139,7 +157,7 @@ describe('trailer bed + park scoring', () => {
   })
 
   it('scores a normal park then a perfect stack with the original formula', () => {
-    const bedMidX = -(trailer.cabL * 0.15 + trailer.bedL / 2)
+    const bedMidX = trailerBedLocalX(trailer).mid
     const normal = evaluatePark({ x: pose.x + bedMidX, y: pose.y + 12, speed: 40 }, pose, trailer, 3, 0)
     expect(normal.perfect).toBe(false)
     expect(normal.gained).toBe(300)
@@ -154,7 +172,7 @@ describe('trailer bed + park scoring', () => {
   })
 
   it('caps combo at 9 and perfect streak at 5', () => {
-    const bedMidX = -(trailer.cabL * 0.15 + trailer.bedL / 2)
+    const bedMidX = trailerBedLocalX(trailer).mid
     const r = evaluatePark({ x: pose.x + bedMidX, y: pose.y, speed: 0 }, pose, trailer, 9, 5)
     expect(r.nextCombo).toBe(9)
     expect(r.nextStreak).toBe(5)

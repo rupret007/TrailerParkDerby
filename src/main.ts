@@ -35,6 +35,7 @@ import {
   tickBoostRemain,
   tickOrbRespawn,
   TRACK,
+  trailerBedLocalX,
   type RunPhase,
 } from './gameLogic'
 
@@ -1222,7 +1223,7 @@ function drawTrailer() {
   ctx.translate(pose.x, pose.y)
   ctx.rotate(pose.angle)
 
-  const bedX = -trailer.cabL * 0.12 - trailer.bedL
+  const bedX = trailerBedLocalX(trailer).end
 
   // hitch
   ctx.fillStyle = '#666'
