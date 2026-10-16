@@ -107,6 +107,15 @@ function boot() {
   let now = 1000
   return {
     get, key, storageWrite, state: exports.probe!.state,
+    // Model the native button default: Enter keydown clicks its original target
+    // unless a handler cancels it. Browser checks validate this activation path.
+    enter: (repeat = false) => {
+      const event = key('Enter', repeat)
+      if (!event.preventDefault.mock.calls.length && event.target.id.startsWith('btn-')) {
+        dispatch(event.target.id, 'click', { target: event.target })
+      }
+      return event
+    },
     release: (code: string) => key(code, false, 'keyup'),
     tick: () => { now += 50; exports.probe!.frame(now) },
     active: () => document.activeElement.id,
@@ -114,6 +123,59 @@ function boot() {
 }
 
 describe('one-shot shortcut auto-repeat', () => {
+  it('toggles focused Mute only once while Enter is held, then allows a fresh press', () => {
+    const h = boot()
+    h.get('btn-mute').focus()
+    expect(h.enter().preventDefault).not.toHaveBeenCalled()
+    expect(h.state().muted).toBe(true)
+    for (let i = 0; i < 3; i++) {
+      const repeat = h.enter(true)
+      expect(h.state().muted).toBe(true)
+      expect(h.storageWrite).toHaveBeenCalledTimes(1)
+      expect(repeat.preventDefault).toHaveBeenCalledTimes(1)
+    }
+    h.release('Enter')
+    expect(h.enter().preventDefault).not.toHaveBeenCalled()
+    expect(h.state().muted).toBe(false)
+    expect(h.storageWrite).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([
+    ['btn-pause', 'paused', 'btn-resume'],
+    ['btn-restart', 'title', 'btn-start'],
+  ])('does not activate the next focused action when Enter is held on %s', (action, phase, focus) => {
+    const h = boot()
+    if (action === 'btn-restart') h.key('Escape')
+    h.get(action).focus()
+    expect(h.enter().preventDefault).not.toHaveBeenCalled()
+    expect(h.state().phase).toBe(phase)
+    expect(h.active()).toBe(focus)
+    for (let i = 0; i < 3; i++) {
+      const repeat = h.enter(true)
+      expect(h.state().phase).toBe(phase)
+      expect(h.active()).toBe(focus)
+      expect(repeat.preventDefault).toHaveBeenCalledTimes(1)
+    }
+    h.release('Enter')
+    expect(h.enter().preventDefault).not.toHaveBeenCalled()
+    expect(h.state().phase).toBe('playing')
+  })
+
+  it('ignores an Enter repeat that first arrives on Mute without blocking Space defaults', () => {
+    const h = boot()
+    h.get('btn-mute').focus()
+    const repeat = h.enter(true)
+    expect(h.state().muted).toBe(false)
+    expect(h.storageWrite).not.toHaveBeenCalled()
+    expect(repeat.preventDefault).toHaveBeenCalledTimes(1)
+    expect(h.key('Space').preventDefault).not.toHaveBeenCalled()
+    expect(h.key('Space', true).preventDefault).not.toHaveBeenCalled()
+    h.release('Space')
+    h.release('Enter')
+    h.enter()
+    expect(h.state().muted).toBe(true)
+  })
+
   it.each(['Escape', 'KeyP', 'KeyPause'])('%s toggles only on fresh presses', (code) => {
     const h = boot()
     h.key(code)
