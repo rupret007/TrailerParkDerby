@@ -365,12 +365,14 @@ describe('pause dialog focus policy (one Resume, HUD inert, Tab stays inside)', 
     })
   })
 
-  it('cycles Tab and Shift+Tab across the dialog Resume/Restart pair only', () => {
-    expect(PAUSE_DIALOG_ACTION_IDS).toEqual(['btn-resume', 'btn-restart'])
-    expect(nextPauseDialogFocus(PAUSE_DIALOG_ACTION_IDS, 'btn-resume', false)).toBe('btn-restart')
+  it('cycles Tab and Shift+Tab across the dialog actions only', () => {
+    expect(PAUSE_DIALOG_ACTION_IDS).toEqual(['btn-resume', 'btn-pause-mute', 'btn-reset-car', 'btn-restart'])
+    expect(nextPauseDialogFocus(PAUSE_DIALOG_ACTION_IDS, 'btn-resume', false)).toBe('btn-pause-mute')
+    expect(nextPauseDialogFocus(PAUSE_DIALOG_ACTION_IDS, 'btn-pause-mute', false)).toBe('btn-reset-car')
+    expect(nextPauseDialogFocus(PAUSE_DIALOG_ACTION_IDS, 'btn-reset-car', false)).toBe('btn-restart')
     expect(nextPauseDialogFocus(PAUSE_DIALOG_ACTION_IDS, 'btn-restart', false)).toBe('btn-resume')
     expect(nextPauseDialogFocus(PAUSE_DIALOG_ACTION_IDS, 'btn-resume', true)).toBe('btn-restart')
-    expect(nextPauseDialogFocus(PAUSE_DIALOG_ACTION_IDS, 'btn-restart', true)).toBe('btn-resume')
+    expect(nextPauseDialogFocus(PAUSE_DIALOG_ACTION_IDS, 'btn-restart', true)).toBe('btn-reset-car')
     expect(nextPauseDialogFocus(PAUSE_DIALOG_ACTION_IDS, 'btn-pause', false)).toBe('btn-resume')
     expect(nextPauseDialogFocus(PAUSE_DIALOG_ACTION_IDS, 'btn-mute', true)).toBe('btn-restart')
     expect(nextPauseDialogFocus(PAUSE_DIALOG_ACTION_IDS, null, false)).toBe('btn-resume')
@@ -407,6 +409,8 @@ describe('shipped pause-dialog surfaces (guards against reverting the actual fix
     const pauseOverlay = indexHtml.match(/id="pause-overlay"[\s\S]*?<\/div>\s*<\/div>/)?.[0] ?? ''
     expect(pauseOverlay).toMatch(/role="dialog"/)
     expect(pauseOverlay).toMatch(/id="btn-resume"[^>]*>RESUME</)
+    expect(pauseOverlay).toMatch(/id="btn-pause-mute"/)
+    expect(pauseOverlay).toMatch(/id="btn-reset-car"/)
     expect(pauseOverlay).toMatch(/id="btn-restart"/)
     expect(pauseOverlay.match(/RESUME/g)?.length).toBe(1)
     expect(indexHtml).toMatch(/<canvas id="game"[^>]*tabindex="-1"/)

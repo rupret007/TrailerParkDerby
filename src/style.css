@@ -218,7 +218,9 @@ kbd {
 
 #btn-start,
 #btn-resume,
-#btn-restart {
+#btn-restart,
+#btn-pause-mute,
+#btn-reset-car {
   width: 100%;
   border: 0;
   border-radius: 12px;
@@ -243,12 +245,16 @@ kbd {
 
 #btn-start:active,
 #btn-resume:active,
-#btn-restart:active { transform: scale(0.98); }
+#btn-restart:active,
+#btn-pause-mute:active,
+#btn-reset-car:active { transform: scale(0.98); }
 
 /* Keep scripted focus visible too, including after pointer input. */
 #btn-start:focus,
 #btn-resume:focus,
 #btn-restart:focus,
+#btn-pause-mute:focus,
+#btn-reset-car:focus,
 .hud-btn:focus,
 :focus-visible {
   outline: 3px solid #ffe066;
@@ -380,6 +386,8 @@ body.mode-mobile.landscape .pad-right-cluster {
   #btn-start:active,
   #btn-resume:active,
   #btn-restart:active,
+  #btn-pause-mute:active,
+  #btn-reset-car:active,
   .pad:active,
   .pad.is-down {
     transform: none;

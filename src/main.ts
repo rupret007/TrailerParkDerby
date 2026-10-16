@@ -48,6 +48,8 @@ const btnResume = document.getElementById('btn-resume') as HTMLButtonElement
 const btnRestart = document.getElementById('btn-restart') as HTMLButtonElement
 const btnPause = document.getElementById('btn-pause') as HTMLButtonElement
 const btnMute = document.getElementById('btn-mute') as HTMLButtonElement
+const btnPauseMute = document.getElementById('btn-pause-mute') as HTMLButtonElement
+const btnResetCar = document.getElementById('btn-reset-car') as HTMLButtonElement
 const hudActions = document.getElementById('hud-actions') as HTMLDivElement
 const playStatusEl = document.getElementById('play-status') as HTMLDivElement | null
 const scoreEl = document.getElementById('score') as HTMLSpanElement
@@ -358,12 +360,17 @@ function syncChrome() {
     btnPause.textContent = policy.pauseButtonLabel
     btnPause.setAttribute('aria-label', 'Pause game')
   }
-  if (btnMute) {
-    btnMute.setAttribute('aria-pressed', muted ? 'true' : 'false')
-    btnMute.textContent = muted ? 'Unmute' : 'Mute'
-    btnMute.setAttribute('aria-label', muted ? 'Unmute sound' : 'Mute sound')
-  }
+  syncMuteButton(btnMute, false)
+  syncMuteButton(btnPauseMute, true)
   syncPlayStatusOverlay()
+}
+
+function syncMuteButton(btn: HTMLButtonElement | null, caps: boolean) {
+  if (!btn) return
+  const label = muted ? 'Unmute' : 'Mute'
+  btn.setAttribute('aria-pressed', muted ? 'true' : 'false')
+  btn.textContent = caps ? label.toUpperCase() : label
+  btn.setAttribute('aria-label', muted ? 'Unmute sound' : 'Mute sound')
 }
 
 function ensureAudio() {
@@ -498,6 +505,14 @@ function resumeGame() {
   document.getElementById(RESUME_FOCUS_TARGET_ID)?.focus({ preventScroll: true })
 }
 
+function resetCarFromPause() {
+  if (phase !== 'paused') return
+  resetPlayerNearStart()
+  flash(pick(['Retry — pride intact', 'Retry — flamingos judging', 'Retry — HOA watching']))
+  beep(220, 0.1)
+  resumeGame()
+}
+
 function restartToTitle() {
   phase = 'title'
   keys.clear()
@@ -530,6 +545,8 @@ btnPause?.addEventListener('click', () => {
   else if (phase === 'paused') resumeGame()
 })
 btnMute?.addEventListener('click', toggleMute)
+btnPauseMute?.addEventListener('click', toggleMute)
+btnResetCar?.addEventListener('click', resetCarFromPause)
 
 document.addEventListener('keydown', (e) => {
   if (phase !== 'paused' || e.key !== 'Tab') return
@@ -580,6 +597,10 @@ window.addEventListener('keydown', (e) => {
     resetPlayerNearStart()
     flash(pick(['Retry — pride intact', 'Retry — flamingos judging', 'Retry — HOA watching']))
     beep(220, 0.1)
+  }
+  if (e.code === 'KeyR' && phase === 'paused') {
+    e.preventDefault()
+    resetCarFromPause()
   }
 })
 

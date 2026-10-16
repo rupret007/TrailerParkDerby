@@ -19,7 +19,7 @@ describe('title dialog and action focus', () => {
 
   // Check the shipped CSS contract; browser checks additionally exercise the cascade
   // after pointer input, when programmatic focus need not match :focus-visible.
-  it.each(['#btn-start', '#btn-resume', '#btn-restart', '.hud-btn'])(
+  it.each(['#btn-start', '#btn-resume', '#btn-restart', '#btn-pause-mute', '#btn-reset-car', '.hud-btn'])(
     '%s has the yellow ring for ordinary focus, independent of input modality',
     (selector) => {
       let outline: string | undefined
