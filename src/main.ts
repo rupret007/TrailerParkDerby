@@ -560,7 +560,8 @@ window.addEventListener('keydown', (e) => {
   const driveFromHud = phase === 'playing' && (uiTarget === btnMute || uiTarget === btnPause)
     && ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)
   if (!onUi || driveFromHud) {
-    if (driveFromHud) canvas.focus({ preventScroll: true })
+    // A held key must not steal focus after the player Tabs to a HUD action.
+    if (driveFromHud && !e.repeat) canvas.focus({ preventScroll: true })
     keys.add(e.code)
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
       e.preventDefault()

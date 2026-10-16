@@ -72,9 +72,9 @@ function browserFixture() {
     createLinearGradient: () => ({ addColorStop() {} }),
     createRadialGradient: () => ({ addColorStop() {} }),
   }, { get: (object, key: string) => object[key] ?? (() => {}) })
-  function eventFor(target: Element | null, code = '', shiftKey = false) {
+  function eventFor(target: Element | null, code = '', shiftKey = false, repeat = false) {
     const event = {
-      target, code, key: code === 'Space' ? ' ' : code, shiftKey,
+      target, code, key: code === 'Space' ? ' ' : code, shiftKey, repeat,
       defaultPrevented: false,
       preventDefault() { this.defaultPrevented = true },
     }
@@ -98,8 +98,8 @@ function browserFixture() {
   return {
     get, document,
     click(id: string) { get(id).dispatch('click', eventFor(get(id))) },
-    key(type: 'keydown' | 'keyup', code: string, shiftKey = false) {
-      const event = eventFor(document.activeElement, code, shiftKey)
+    key(type: 'keydown' | 'keyup', code: string, shiftKey = false, repeat = false) {
+      const event = eventFor(document.activeElement, code, shiftKey, repeat)
       document.activeElement?.dispatch(type, event)
       document.dispatch(type, event)
       window.dispatch(type, event)
@@ -164,6 +164,33 @@ describe('HUD keyboard input during play', () => {
     browser.key('keyup', 'Space')
     expect(input()).toEqual(idleInput)
     expect(browser.get('btn-mute').attrs.get('aria-pressed')).toBe('true')
+  })
+
+  it.each(['btn-mute', 'btn-pause'])('keeps deliberate %s focus when held driving keys repeat', (id) => {
+    browser.key('keydown', 'KeyW')
+    browser.key('keydown', 'ArrowLeft')
+    expect(input()).toEqual({ ...idleInput, accel: true, left: true })
+    // The browser moves focus here when the player Tabs to a HUD action.
+    expect(browser.key('keydown', 'Tab').defaultPrevented).toBe(false)
+    browser.get(id).focus()
+    for (let i = 0; i < 3; i++) {
+      browser.key('keydown', 'KeyW', false, true)
+      expect(browser.key('keydown', 'ArrowLeft', false, true).defaultPrevented).toBe(true)
+      expect(browser.document.activeElement?.id).toBe(id)
+      expect(input()).toEqual({ ...idleInput, accel: true, left: true })
+    }
+    for (const code of ['Enter', 'Space']) {
+      expect(browser.key('keydown', code).defaultPrevented).toBe(false)
+      expect(input()).toEqual({ ...idleInput, accel: true, left: true })
+      browser.key('keyup', code)
+    }
+    browser.key('keyup', 'KeyW')
+    browser.key('keyup', 'ArrowLeft')
+    expect(input()).toEqual(idleInput)
+    expect(browser.document.activeElement?.id).toBe(id)
+    browser.click(id)
+    expect(browser.document.activeElement?.id).toBe(id === 'btn-mute' ? 'game' : 'btn-resume')
+    if (id === 'btn-mute') expect(browser.get(id).attrs.get('aria-pressed')).toBe('true')
   })
 
   it('driving from focused Mute hands subsequent Space to the handbrake', () => {
