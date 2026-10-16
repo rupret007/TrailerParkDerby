@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import {
   AI_SPAWN_PHASES,
   aiLaneOffset,
+  aiSpawnKinematics,
   applySoftTrackPull,
   clamp,
   clampDt,
@@ -282,6 +283,35 @@ describe('spawn clearance', () => {
 
   it('uses the opposite lane from AI at the spawn phase so a sitting player is not bonked', () => {
     expect(Math.abs(PLAYER_SPAWN_LANE - aiLaneOffset(PLAYER_SPAWN_PHASE))).toBeGreaterThan(26)
+  })
+
+  it('snaps each rival back to its named start phase and centerline pose', () => {
+    const drifted = AI_SPAWN_PHASES.map((phase, i) =>
+      aiSpawnKinematics(i === 3 ? PLAYER_SPAWN_PHASE : phase + 0.2, geom),
+    )
+    expect(spawnClearOfTraffic(PLAYER_SPAWN_PHASE, drifted.map((car) => car.aiPhase))).toBe(false)
+
+    const reset = drifted.map((_, i) => aiSpawnKinematics(AI_SPAWN_PHASES[i]!, geom))
+    expect(spawnClearOfTraffic(PLAYER_SPAWN_PHASE, reset.map((car) => car.aiPhase))).toBe(true)
+    for (const [i, car] of reset.entries()) {
+      const home = pointOnTrack(AI_SPAWN_PHASES[i]!, geom)
+      const tan = tangentOnTrack(AI_SPAWN_PHASES[i]!, geom)
+      expect(car.aiPhase).toBeCloseTo(AI_SPAWN_PHASES[i]!, 10)
+      expect(car.x).toBeCloseTo(home.x)
+      expect(car.y).toBeCloseTo(home.y)
+      expect(car.angle).toBeCloseTo(Math.atan2(tan.y, tan.x))
+      expect(car.speed).toBeCloseTo(140 + AI_SPAWN_PHASES[i]! * 40)
+    }
+  })
+
+  it('Start resets the live AI pack, not only the player and trailer', () => {
+    const startGame = mainTsSource.match(/function startGame\(\) \{[\s\S]*?\n\}/)?.[0] ?? ''
+    expect(startGame).toMatch(/resetAiPack\(\)/)
+    expect(startGame).toMatch(/resetPlayerNearStart\(\)/)
+    expect(startGame).toMatch(/trailer\.progress = 0\.05/)
+    expect(mainTsSource).toMatch(/function resetAiPack\(\)/)
+    expect(mainTsSource).toMatch(/aiSpawnKinematics\(AI_SPAWN_PHASES\[i\]/)
+    expect(mainTsSource).toMatch(/function makeAi\([\s\S]*?aiSpawnKinematics\(phase, geom\)/)
   })
 })
 

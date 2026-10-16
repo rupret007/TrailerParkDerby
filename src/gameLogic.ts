@@ -338,6 +338,26 @@ export const PLAYER_SPAWN_LANE = -32
 export const AI_SPAWN_PHASES = [0.15, 0.45, 0.75, 0.92]
 export const SPAWN_PROTECT_SEC = 0.8
 
+/** Centerline pose used when a rival is created or when Start snaps the pack. */
+export function aiSpawnKinematics(phase: number, geom: TrackGeom): {
+  x: number
+  y: number
+  angle: number
+  speed: number
+  aiPhase: number
+} {
+  const t = wrap01(phase)
+  const p = pointOnTrack(t, geom)
+  const tan = tangentOnTrack(t, geom)
+  return {
+    x: p.x,
+    y: p.y,
+    angle: Math.atan2(tan.y, tan.x),
+    speed: 140 + t * 40,
+    aiPhase: t,
+  }
+}
+
 /** AI lane at a phase: (phase * 7) % 1 > 0.5 ? 14 : -10 */
 export function aiLaneOffset(phase: number): number {
   return (wrap01(phase) * 7) % 1 > 0.5 ? 14 : -10
