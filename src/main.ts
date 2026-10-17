@@ -561,6 +561,16 @@ window.addEventListener('keydown', (e) => {
       e.preventDefault()
     }
   }
+  // Keep held driving input above; toggles and retry act once per physical press.
+  if (e.repeat && ['Escape', 'KeyP', 'KeyPause', 'KeyM', 'KeyN', 'KeyR'].includes(e.code)) return
+  if (e.repeat && e.code === 'Enter') {
+    const button = e.target instanceof HTMLElement ? e.target.closest('button') : null
+    if (button && [btnStart, btnResume, btnRestart, btnPause, btnMute].includes(button)) {
+      // Cancel the native click, including when a previous action moved focus.
+      e.preventDefault()
+      return
+    }
+  }
   if (e.code === 'Escape') {
     if (phase === 'playing') {
       e.preventDefault()
