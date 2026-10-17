@@ -1,6 +1,8 @@
 import './style.css'
 import { drawPlayerLabel, rotatedBounds } from './playerLabel'
 import {
+  AI_SPAWN_PHASES,
+  aiSpawnKinematics,
   applySoftTrackPull,
   clampDt,
   collectBoost,
@@ -257,22 +259,22 @@ function makeAi(
   name = 'Rival',
   kind: 'sedan' | 'van' = 'sedan',
 ): Car {
-  const p = pointOnTrack(phase)
-  const tan = tangentOnTrack(phase)
   const isVan = kind === 'van'
   return {
-    x: p.x,
-    y: p.y,
-    angle: Math.atan2(tan.y, tan.x),
-    speed: 140 + phase * 40,
+    ...aiSpawnKinematics(phase, geom),
     color,
     isPlayer: false,
-    aiPhase: phase,
     width: isVan ? 20 : 16,
     length: isVan ? 36 : 30,
     name,
     kind,
   }
+}
+
+function resetAiPack() {
+  aiCars.forEach((car, i) => {
+    Object.assign(car, aiSpawnKinematics(AI_SPAWN_PHASES[i] ?? car.aiPhase, geom))
+  })
 }
 
 function pick<T>(arr: T[]): T {
@@ -461,6 +463,7 @@ function startGame() {
   hornCd = 0
   trailer.progress = 0.05
   placeBoosts()
+  resetAiPack()
   resetPlayerNearStart()
   scoreEl.textContent = '0'
   comboEl.textContent = '1'
