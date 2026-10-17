@@ -91,7 +91,7 @@ export function loadMainGame() {
     },
     navigator: { userAgent: '', platform: '', maxTouchPoints: 0 },
     localStorage: { getItem: () => null, setItem: noop },
-    performance: { now: () => 0 }, requestAnimationFrame: noop, setInterval: noop,
+    performance: { now: () => 0 }, requestAnimationFrame: noop, cancelAnimationFrame: noop, setInterval: noop,
   }
   const compiled = transpileModule(mainSource, {
     compilerOptions: { module: ModuleKind.CommonJS },

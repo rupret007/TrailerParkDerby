@@ -104,6 +104,8 @@ async function boot() {
   for (const name of ['Node', 'Element', 'HTMLElement']) vi.stubGlobal(name, TestElement)
   vi.stubGlobal('localStorage', { getItem: () => null, setItem() {} })
   vi.stubGlobal('requestAnimationFrame', vi.fn(() => 1))
+  // T11 cancels the queued frame on pause.
+  vi.stubGlobal('cancelAnimationFrame', vi.fn())
   await import('./main')
   const click = (id: string) => get(id).emit('click', event(get(id)))
   const key = (code: string, type = 'keydown', shiftKey = false, modifiers: Modifiers = {}) => {

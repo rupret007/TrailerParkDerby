@@ -146,6 +146,7 @@ let message = ''
 let messageT = 0
 let boostRemain = 0
 let lastTs = 0
+let animationFrameId: number | null = null
 let audioCtx: AudioContext | null = null
 let perfectStreak = 0
 let nearMissCd = 0
@@ -483,12 +484,16 @@ function startGame() {
   beep(660, 0.12, 'triangle', 0.04)
   flash(pick(['Engines warm. Flamingos nervous.', 'Flatbed’s moving — don’t embarrass the county.', 'Go park something ridiculous.']), 2.0)
   lastTs = performance.now()
-  requestAnimationFrame(frame)
+  scheduleFrame()
 }
 
 function pauseGame() {
   if (phase !== 'playing') return
   phase = 'paused'
+  if (animationFrameId !== null) {
+    cancelAnimationFrame(animationFrameId)
+    animationFrameId = null
+  }
   keys.clear()
   clearTouch()
   setOverlayHidden(pauseOverlay, false)
@@ -506,7 +511,7 @@ function resumeGame() {
   syncChrome()
   applyPlayMode()
   lastTs = performance.now()
-  requestAnimationFrame(frame)
+  scheduleFrame()
   document.getElementById(RESUME_FOCUS_TARGET_ID)?.focus({ preventScroll: true })
 }
 
@@ -532,7 +537,7 @@ function restartToTitle() {
   applyPlayMode()
   btnStart?.focus()
   lastTs = performance.now()
-  requestAnimationFrame(titlePreview)
+  scheduleFrame()
 }
 
 function toggleMute() {
@@ -593,7 +598,7 @@ window.addEventListener('keydown', (e) => {
     }
   }
   // Keep held driving input above; toggles and retry act once per physical press.
-  if (e.repeat && ['Escape', 'KeyP', 'KeyPause', 'KeyM', 'KeyN', 'KeyR'].includes(e.code)) return
+  if (e.repeat && ['Escape', 'KeyP', 'Pause', 'KeyPause', 'KeyM', 'KeyN', 'KeyR'].includes(e.code)) return
   if (e.code === 'Enter') {
     const button = e.target instanceof HTMLElement ? e.target.closest('button') : null
     const actionButton = button && [btnStart, btnResume, btnPauseMute, btnResetCar, btnRestart, btnPause, btnMute].includes(button) ? button : null
@@ -611,10 +616,10 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Escape') {
     if (phase === 'playing') {
       e.preventDefault()
-      pauseGame()
+      if (!e.repeat) pauseGame()
     } else if (phase === 'paused') {
       e.preventDefault()
-      resumeGame()
+      if (!e.repeat) resumeGame()
     }
     return
   }
@@ -622,7 +627,7 @@ window.addEventListener('keydown', (e) => {
   const onPauseAction = phase === 'paused'
     && [btnResume, btnPauseMute, btnResetCar, btnRestart].some(button => button && e.target === button)
   // Browser/platform combinations such as Ctrl/Cmd+P must not toggle gameplay.
-  if ((e.code === 'KeyP' || e.code === 'KeyPause') && (!onUi || onPauseAction)
+  if ((e.code === 'KeyP' || e.code === 'Pause' || e.code === 'KeyPause') && (!onUi || onPauseAction)
     && !e.ctrlKey && !e.metaKey && !e.altKey) {
     if (phase === 'playing') pauseGame()
     else if (phase === 'paused') resumeGame()
@@ -1483,6 +1488,20 @@ function drawHudOverlay() {
   ctx.fillText(status, 18, H - 14)
 }
 
+// One owner schedules both title and gameplay. A queued callback reads the
+// current phase, so transitions cannot leave an old loop running alongside it.
+function scheduleFrame() {
+  if (animationFrameId !== null || phase === 'paused') return
+  animationFrameId = requestAnimationFrame(animate)
+}
+
+function animate(ts: number) {
+  animationFrameId = null
+  if (phase === 'playing') frame(ts)
+  else if (phase === 'title') titlePreview(ts)
+  scheduleFrame()
+}
+
 function frame(ts: number) {
   if (phase !== 'playing') return
   const dt = clampDt((ts - lastTs) / 1000)
@@ -1515,14 +1534,12 @@ function frame(ts: number) {
   drawPlayerLabel(ctx, player, bedBounds, canvas.clientWidth / W)
   ctx.restore()
   drawHudOverlay()
-
-  requestAnimationFrame(frame)
 }
 
 // Idle title preview loop
 function titlePreview(ts: number) {
   if (phase !== 'title') return
-  const dt = clampDt((ts - lastTs) / 1000 || 0.016)
+  const dt = clampDt((ts - lastTs) / 1000)
   lastTs = ts
   trailer.progress = (trailer.progress + 0.04 * dt) % 1
   for (const car of aiCars) {
@@ -1538,7 +1555,6 @@ function titlePreview(ts: number) {
   drawTrailer()
   drawBoosts(ts)
   for (const c of aiCars) drawCar(c)
-  requestAnimationFrame(titlePreview)
 }
 
 
@@ -1655,4 +1671,4 @@ syncChrome()
 btnStart?.focus({ preventScroll: true })
 placeBoosts()
 lastTs = performance.now()
-requestAnimationFrame(titlePreview)
+scheduleFrame()

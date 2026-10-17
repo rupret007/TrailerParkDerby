@@ -89,7 +89,7 @@ function boot() {
     },
     navigator: { userAgent: '', maxTouchPoints: 0 },
     localStorage: { getItem: () => null, setItem: storageWrite },
-    performance: { now: () => 1000 }, requestAnimationFrame: () => 1,
+    performance: { now: () => 1000 }, requestAnimationFrame: () => 1, cancelAnimationFrame: () => {},
     setTimeout() {}, setInterval() {},
   }
   new Function(...Object.keys(browser), executable)(...Object.values(browser))
