@@ -79,7 +79,8 @@ async function boot() {
     if (!element) throw new Error(`Missing fixture element: ${id}`)
     return element
   }
-  for (const id of ['btn-resume', 'btn-restart']) get(id).parent = get('pause-overlay')
+  const PAUSE_ACTIONS = ['btn-resume', 'btn-pause-mute', 'btn-reset-car', 'btn-restart']
+  for (const id of PAUSE_ACTIONS) get(id).parent = get('pause-overlay')
   const doc = Object.assign(new EventHub(), {
     activeElement: null as TestElement | null,
     body: new TestElement('body'),
@@ -144,7 +145,7 @@ describe('pause shortcuts through the installed input handlers', () => {
     expect(h.active()).toBe('game')
     h.press('KeyP')
     expect(h.paused()).toBe(true)
-    for (const action of ['btn-resume', 'btn-restart']) {
+    for (const action of ['btn-resume', 'btn-pause-mute', 'btn-reset-car', 'btn-restart']) {
       h.get(action).focus()
       expect(h.press('KeyP', false, { [modifier]: true }).defaultPrevented).toBe(false)
       expect(h.paused()).toBe(true)
@@ -164,12 +165,12 @@ describe('pause shortcuts through the installed input handlers', () => {
     expect(h.active()).toBe('game')
   })
 
-  it.each(['btn-resume', 'btn-restart'])('P → keyup → P resumes from %s', async (action) => {
+  it.each(['btn-resume', 'btn-pause-mute', 'btn-reset-car', 'btn-restart'])('P → keyup → P resumes from %s', async (action) => {
     const h = await boot()
     h.press('KeyP')
     expect(h.paused()).toBe(true)
     expect(h.active()).toBe('btn-resume')
-    if (action === 'btn-restart') h.press('Tab')
+    for (let i = 0; i < ['btn-resume', 'btn-pause-mute', 'btn-reset-car', 'btn-restart'].indexOf(action); i++) h.press('Tab')
     expect(h.active()).toBe(action)
     h.press('KeyP')
     expect(h.paused()).toBe(false)
@@ -177,7 +178,7 @@ describe('pause shortcuts through the installed input handlers', () => {
     expect(h.get('game').focusOptions).toEqual({ preventScroll: true })
   })
 
-  it.each(['btn-resume', 'btn-restart'])('P resumes mouse-opened pause from %s', async (action) => {
+  it.each(['btn-resume', 'btn-pause-mute', 'btn-reset-car', 'btn-restart'])('P resumes mouse-opened pause from %s', async (action) => {
     const h = await boot()
     h.click('btn-pause')
     h.get(action).focus()
@@ -186,7 +187,7 @@ describe('pause shortcuts through the installed input handlers', () => {
     expect(h.active()).toBe('game')
   })
 
-  it.each(['btn-resume', 'btn-restart'])('Escape still resumes from %s', async (action) => {
+  it.each(['btn-resume', 'btn-pause-mute', 'btn-reset-car', 'btn-restart'])('Escape still resumes from %s', async (action) => {
     const h = await boot()
     expect(h.press('Escape').defaultPrevented).toBe(true)
     expect(h.paused()).toBe(true)
@@ -199,11 +200,15 @@ describe('pause shortcuts through the installed input handlers', () => {
   it('traps Tab in both directions and redirects focus back into the dialog', async () => {
     const h = await boot()
     h.press('KeyP')
+    const cycles = {
+      forward: ['btn-pause-mute', 'btn-reset-car', 'btn-restart', 'btn-resume'],
+      backward: ['btn-restart', 'btn-reset-car', 'btn-pause-mute', 'btn-resume'],
+    }
     for (const shift of [false, true]) {
-      expect(h.press('Tab', shift).defaultPrevented).toBe(true)
-      expect(h.active()).toBe('btn-restart')
-      expect(h.press('Tab', shift).defaultPrevented).toBe(true)
-      expect(h.active()).toBe('btn-resume')
+      for (const expected of shift ? cycles.backward : cycles.forward) {
+        expect(h.press('Tab', shift).defaultPrevented).toBe(true)
+        expect(h.active()).toBe(expected)
+      }
     }
     h.get('game').focus()
     expect(h.active()).toBe('btn-resume')

@@ -101,8 +101,8 @@ function browserFixture(storedMute = '0') {
   return {
     get, document, storage,
     click(id: string) { get(id).dispatch('click', eventFor(get(id))) },
-    key(type: 'keydown' | 'keyup', code: string, shiftKey = false) {
-      const event = eventFor(document.activeElement, code, shiftKey)
+    key(type: 'keydown' | 'keyup', code: string, shiftKey = false, modifiers: { ctrlKey?: boolean, metaKey?: boolean, altKey?: boolean } = {}) {
+      const event = Object.assign(eventFor(document.activeElement, code, shiftKey), modifiers)
       document.activeElement?.dispatch(type, event)
       document.dispatch(type, event)
       window.dispatch(type, event)
@@ -233,6 +233,17 @@ describe('Mute and Reset car in the pause dialog', () => {
     browser.tick()
     expect(physics.mock.lastCall![1].accel).toBe(true)
     expect(player.speed).toBeGreaterThan(0)
+  })
+
+  it.each(['ctrlKey', 'metaKey', 'altKey'] as const)('leaves %s + R (browser reload) alone while paused', (modifier) => {
+    const player = physics.mock.lastCall![0]
+    player.x = 100
+    player.y = 100
+    player.speed = 80
+    browser.click('btn-pause')
+    expect(browser.key('keydown', 'KeyR', false, { [modifier]: true }).defaultPrevented).toBe(false)
+    expect(player).toMatchObject({ x: 100, y: 100, speed: 80 })
+    expect(browser.get('pause-overlay').attrs.has('hidden')).toBe(false)
   })
 
   it('ignores Reset car when the game is not paused', () => {

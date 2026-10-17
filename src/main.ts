@@ -549,7 +549,11 @@ btnPause?.addEventListener('click', () => {
   if (phase === 'playing') pauseGame()
   else if (phase === 'paused') resumeGame()
 })
-btnMute?.addEventListener('click', toggleMute)
+btnMute?.addEventListener('click', () => {
+  toggleMute()
+  // Finish the HUD action in gameplay so the next Space press is a handbrake.
+  if (phase === 'playing') canvas.focus({ preventScroll: true })
+})
 btnPauseMute?.addEventListener('click', toggleMute)
 btnResetCar?.addEventListener('click', resetCarFromPause)
 
@@ -570,9 +574,19 @@ document.addEventListener('focusin', (e) => {
   btnResume?.focus()
 })
 
+// The action button a held Enter started on; its repeats stay cancelled until keyup.
+let enterHeldOnAction: HTMLButtonElement | null = null
+
 window.addEventListener('keydown', (e) => {
-  const onUi = e.target instanceof HTMLElement && !!e.target.closest('button, a, input, textarea')
-  if (!onUi) {
+  const uiTarget = e.target instanceof HTMLElement ? e.target.closest('button, a, input, textarea') : null
+  const onUi = !!uiTarget
+  // WASD/arrows express driving intent even while a HUD button has focus.
+  // Leave Enter/Space native until driving resumes or the button is activated.
+  const driveFromHud = phase === 'playing' && (uiTarget === btnMute || uiTarget === btnPause)
+    && ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)
+  if (!onUi || driveFromHud) {
+    // A held key must not steal focus after the player Tabs to a HUD action.
+    if (driveFromHud && !e.repeat) canvas.focus({ preventScroll: true })
     keys.add(e.code)
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
       e.preventDefault()
@@ -580,12 +594,18 @@ window.addEventListener('keydown', (e) => {
   }
   // Keep held driving input above; toggles and retry act once per physical press.
   if (e.repeat && ['Escape', 'KeyP', 'KeyPause', 'KeyM', 'KeyN', 'KeyR'].includes(e.code)) return
-  if (e.repeat && e.code === 'Enter') {
+  if (e.code === 'Enter') {
     const button = e.target instanceof HTMLElement ? e.target.closest('button') : null
-    if (button && [btnStart, btnResume, btnRestart, btnPause, btnMute].includes(button)) {
-      // Cancel the native click, including when a previous action moved focus.
-      e.preventDefault()
-      return
+    const actionButton = button && [btnStart, btnResume, btnPauseMute, btnResetCar, btnRestart, btnPause, btnMute].includes(button) ? button : null
+    if (e.repeat) {
+      // Cancel the native click, including when a previous action moved focus
+      // (HUD Mute hands focus back to the canvas mid-drive, so remember the press).
+      if (actionButton || enterHeldOnAction) {
+        e.preventDefault()
+        return
+      }
+    } else {
+      enterHeldOnAction = actionButton
     }
   }
   if (e.code === 'Escape') {
@@ -598,8 +618,9 @@ window.addEventListener('keydown', (e) => {
     }
     return
   }
-  // Pause moves focus to Resume; keep the shortcut available on either dialog action.
-  const onPauseAction = phase === 'paused' && (e.target === btnResume || e.target === btnRestart)
+  // Pause moves focus to Resume; keep the shortcut available on every dialog action.
+  const onPauseAction = phase === 'paused'
+    && [btnResume, btnPauseMute, btnResetCar, btnRestart].some(button => button && e.target === button)
   // Browser/platform combinations such as Ctrl/Cmd+P must not toggle gameplay.
   if ((e.code === 'KeyP' || e.code === 'KeyPause') && (!onUi || onPauseAction)
     && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -617,13 +638,17 @@ window.addEventListener('keydown', (e) => {
     flash(pick(['Retry — pride intact', 'Retry — flamingos judging', 'Retry — HOA watching']))
     beep(220, 0.1)
   }
-  if (e.code === 'KeyR' && phase === 'paused') {
+  // Ctrl/Cmd/Alt+R stays a browser shortcut (reload) while paused.
+  if (e.code === 'KeyR' && phase === 'paused' && !e.ctrlKey && !e.metaKey && !e.altKey) {
     e.preventDefault()
     resetCarFromPause()
   }
 })
 
-window.addEventListener('keyup', (e) => keys.delete(e.code))
+window.addEventListener('keyup', (e) => {
+  keys.delete(e.code)
+  if (e.code === 'Enter') enterHeldOnAction = null
+})
 
 function trailerPose() {
   const t = trailer.progress
