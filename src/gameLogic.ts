@@ -187,6 +187,11 @@ export function shouldResetComboOnMiss(parkTimer: number, stillInBed: boolean): 
   return !stillInBed && parkTimer > COMBO_BREAK_TIMER
 }
 
+/** Radio one-liners must not steal an active park hold or a still-fresh flash. */
+export function shouldPlayRadioLine(messageT: number, parkTimer: number): boolean {
+  return messageT <= 0.4 && parkTimer <= 0
+}
+
 export function decayParkTimer(parkTimer: number, dt: number): number {
   return Math.max(0, parkTimer - dt * 1.2)
 }

@@ -34,6 +34,7 @@ import {
   RESUME_FOCUS_TARGET_ID,
   pointInTrailerBed,
   pointOnTrack,
+  shouldPlayRadioLine,
   shouldResetComboOnMiss,
   stepPlayer,
   TRAILER_BED_CAB_GAP,
@@ -187,6 +188,16 @@ describe('trailer bed + park scoring', () => {
   it('decays the park timer at 1.2x when not holding', () => {
     expect(decayParkTimer(1, 0.5)).toBeCloseTo(0.4)
     expect(decayParkTimer(0.1, 1)).toBe(0)
+  })
+
+  it('keeps radio chatter off an active park hold and off a fresh flash', () => {
+    expect(shouldPlayRadioLine(0, 0)).toBe(true)
+    expect(shouldPlayRadioLine(0.4, 0)).toBe(true)
+    expect(shouldPlayRadioLine(0.41, 0)).toBe(false)
+    expect(shouldPlayRadioLine(0, 0.01)).toBe(false)
+    expect(shouldPlayRadioLine(2.1, 1.2)).toBe(false)
+    expect(mainTsSource).toMatch(/if \(!shouldPlayRadioLine\(messageT, parkTimer\)\) return/)
+    expect(mainTsSource).not.toMatch(/if \(messageT > 0\.4\) return/)
   })
 })
 

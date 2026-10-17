@@ -27,6 +27,7 @@ import {
   pointInTrailerBed as pointInTrailerBedAt,
   pointOnTrack as pointOnTrackAt,
   RESUME_FOCUS_TARGET_ID,
+  shouldPlayRadioLine,
   shouldResetComboOnMiss,
   shouldSuppressTouchGesture,
   stepPlayer,
@@ -734,7 +735,7 @@ function updateRadio(dt: number) {
   radioT -= dt
   if (radioT > 0) return
   radioT = 10 + Math.random() * 14
-  if (messageT > 0.4) return
+  if (!shouldPlayRadioLine(messageT, parkTimer)) return
   flash(
     pick([
       'RADIO: “Keep the flamingos upright.”',
