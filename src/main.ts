@@ -1,6 +1,8 @@
 import './style.css'
 import { drawPlayerLabel, rotatedBounds } from './playerLabel'
 import {
+  AI_SPAWN_PHASES,
+  aiSpawnKinematics,
   applySoftTrackPull,
   clampDt,
   collectBoost,
@@ -27,6 +29,7 @@ import {
   pointInTrailerBed as pointInTrailerBedAt,
   pointOnTrack as pointOnTrackAt,
   RESUME_FOCUS_TARGET_ID,
+  shouldPlayRadioLine,
   shouldResetComboOnMiss,
   shouldSuppressTouchGesture,
   stepPlayer,
@@ -35,6 +38,7 @@ import {
   tickBoostRemain,
   tickOrbRespawn,
   TRACK,
+  trailerBedLocalX,
   type RunPhase,
 } from './gameLogic'
 
@@ -48,6 +52,8 @@ const btnResume = document.getElementById('btn-resume') as HTMLButtonElement
 const btnRestart = document.getElementById('btn-restart') as HTMLButtonElement
 const btnPause = document.getElementById('btn-pause') as HTMLButtonElement
 const btnMute = document.getElementById('btn-mute') as HTMLButtonElement
+const btnPauseMute = document.getElementById('btn-pause-mute') as HTMLButtonElement
+const btnResetCar = document.getElementById('btn-reset-car') as HTMLButtonElement
 const hudActions = document.getElementById('hud-actions') as HTMLDivElement
 const playStatusEl = document.getElementById('play-status') as HTMLDivElement | null
 const scoreEl = document.getElementById('score') as HTMLSpanElement
@@ -256,22 +262,22 @@ function makeAi(
   name = 'Rival',
   kind: 'sedan' | 'van' = 'sedan',
 ): Car {
-  const p = pointOnTrack(phase)
-  const tan = tangentOnTrack(phase)
   const isVan = kind === 'van'
   return {
-    x: p.x,
-    y: p.y,
-    angle: Math.atan2(tan.y, tan.x),
-    speed: 140 + phase * 40,
+    ...aiSpawnKinematics(phase, geom),
     color,
     isPlayer: false,
-    aiPhase: phase,
     width: isVan ? 20 : 16,
     length: isVan ? 36 : 30,
     name,
     kind,
   }
+}
+
+function resetAiPack() {
+  aiCars.forEach((car, i) => {
+    Object.assign(car, aiSpawnKinematics(AI_SPAWN_PHASES[i] ?? car.aiPhase, geom))
+  })
 }
 
 function pick<T>(arr: T[]): T {
@@ -359,12 +365,17 @@ function syncChrome() {
     btnPause.textContent = policy.pauseButtonLabel
     btnPause.setAttribute('aria-label', 'Pause game')
   }
-  if (btnMute) {
-    btnMute.setAttribute('aria-pressed', muted ? 'true' : 'false')
-    btnMute.textContent = muted ? 'Unmute' : 'Mute'
-    btnMute.setAttribute('aria-label', muted ? 'Unmute sound' : 'Mute sound')
-  }
+  syncMuteButton(btnMute, false)
+  syncMuteButton(btnPauseMute, true)
   syncPlayStatusOverlay()
+}
+
+function syncMuteButton(btn: HTMLButtonElement | null, caps: boolean) {
+  if (!btn) return
+  const label = muted ? 'Unmute' : 'Mute'
+  btn.setAttribute('aria-pressed', muted ? 'true' : 'false')
+  btn.textContent = caps ? label.toUpperCase() : label
+  btn.setAttribute('aria-label', muted ? 'Unmute sound' : 'Mute sound')
 }
 
 function ensureAudio() {
@@ -460,6 +471,7 @@ function startGame() {
   hornCd = 0
   trailer.progress = 0.05
   placeBoosts()
+  resetAiPack()
   resetPlayerNearStart()
   scoreEl.textContent = '0'
   comboEl.textContent = '1'
@@ -503,6 +515,14 @@ function resumeGame() {
   document.getElementById(RESUME_FOCUS_TARGET_ID)?.focus({ preventScroll: true })
 }
 
+function resetCarFromPause() {
+  if (phase !== 'paused') return
+  resetPlayerNearStart()
+  flash(pick(['Retry — pride intact', 'Retry — flamingos judging', 'Retry — HOA watching']))
+  beep(220, 0.1)
+  resumeGame()
+}
+
 function restartToTitle() {
   phase = 'title'
   keys.clear()
@@ -534,7 +554,13 @@ btnPause?.addEventListener('click', () => {
   if (phase === 'playing') pauseGame()
   else if (phase === 'paused') resumeGame()
 })
-btnMute?.addEventListener('click', toggleMute)
+btnMute?.addEventListener('click', () => {
+  toggleMute()
+  // Finish the HUD action in gameplay so the next Space press is a handbrake.
+  if (phase === 'playing') canvas.focus({ preventScroll: true })
+})
+btnPauseMute?.addEventListener('click', toggleMute)
+btnResetCar?.addEventListener('click', resetCarFromPause)
 
 document.addEventListener('keydown', (e) => {
   if (phase !== 'paused' || e.key !== 'Tab') return
@@ -553,12 +579,38 @@ document.addEventListener('focusin', (e) => {
   btnResume?.focus()
 })
 
+// The action button a held Enter started on; its repeats stay cancelled until keyup.
+let enterHeldOnAction: HTMLButtonElement | null = null
+
 window.addEventListener('keydown', (e) => {
-  const onUi = e.target instanceof HTMLElement && !!e.target.closest('button, a, input, textarea')
-  if (!onUi) {
+  const uiTarget = e.target instanceof HTMLElement ? e.target.closest('button, a, input, textarea') : null
+  const onUi = !!uiTarget
+  // WASD/arrows express driving intent even while a HUD button has focus.
+  // Leave Enter/Space native until driving resumes or the button is activated.
+  const driveFromHud = phase === 'playing' && (uiTarget === btnMute || uiTarget === btnPause)
+    && ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)
+  if (!onUi || driveFromHud) {
+    // A held key must not steal focus after the player Tabs to a HUD action.
+    if (driveFromHud && !e.repeat) canvas.focus({ preventScroll: true })
     keys.add(e.code)
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
       e.preventDefault()
+    }
+  }
+  // Keep held driving input above; toggles and retry act once per physical press.
+  if (e.repeat && ['Escape', 'KeyP', 'Pause', 'KeyPause', 'KeyM', 'KeyN', 'KeyR'].includes(e.code)) return
+  if (e.code === 'Enter') {
+    const button = e.target instanceof HTMLElement ? e.target.closest('button') : null
+    const actionButton = button && [btnStart, btnResume, btnPauseMute, btnResetCar, btnRestart, btnPause, btnMute].includes(button) ? button : null
+    if (e.repeat) {
+      // Cancel the native click, including when a previous action moved focus
+      // (HUD Mute hands focus back to the canvas mid-drive, so remember the press).
+      if (actionButton || enterHeldOnAction) {
+        e.preventDefault()
+        return
+      }
+    } else {
+      enterHeldOnAction = actionButton
     }
   }
   if (e.code === 'Escape') {
@@ -571,7 +623,12 @@ window.addEventListener('keydown', (e) => {
     }
     return
   }
-  if ((e.code === 'KeyP' || e.code === 'Pause' || e.code === 'KeyPause') && !onUi && !e.repeat) {
+  // Pause moves focus to Resume; keep the shortcut available on every dialog action.
+  const onPauseAction = phase === 'paused'
+    && [btnResume, btnPauseMute, btnResetCar, btnRestart].some(button => button && e.target === button)
+  // Browser/platform combinations such as Ctrl/Cmd+P must not toggle gameplay.
+  if ((e.code === 'KeyP' || e.code === 'Pause' || e.code === 'KeyPause') && (!onUi || onPauseAction)
+    && !e.ctrlKey && !e.metaKey && !e.altKey) {
     if (phase === 'playing') pauseGame()
     else if (phase === 'paused') resumeGame()
   }
@@ -586,9 +643,17 @@ window.addEventListener('keydown', (e) => {
     flash(pick(['Retry — pride intact', 'Retry — flamingos judging', 'Retry — HOA watching']))
     beep(220, 0.1)
   }
+  // Ctrl/Cmd/Alt+R stays a browser shortcut (reload) while paused.
+  if (e.code === 'KeyR' && phase === 'paused' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    e.preventDefault()
+    resetCarFromPause()
+  }
 })
 
-window.addEventListener('keyup', (e) => keys.delete(e.code))
+window.addEventListener('keyup', (e) => {
+  keys.delete(e.code)
+  if (e.code === 'Enter') enterHeldOnAction = null
+})
 
 function trailerPose() {
   const t = trailer.progress
@@ -738,7 +803,7 @@ function updateRadio(dt: number) {
   radioT -= dt
   if (radioT > 0) return
   radioT = 10 + Math.random() * 14
-  if (messageT > 0.4) return
+  if (!shouldPlayRadioLine(messageT, parkTimer)) return
   flash(
     pick([
       'RADIO: “Keep the flamingos upright.”',
@@ -1227,7 +1292,7 @@ function drawTrailer() {
   ctx.translate(pose.x, pose.y)
   ctx.rotate(pose.angle)
 
-  const bedX = -trailer.cabL * 0.12 - trailer.bedL
+  const bedX = trailerBedLocalX(trailer).end
 
   // hitch
   ctx.fillStyle = '#666'
