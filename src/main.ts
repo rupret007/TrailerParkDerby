@@ -52,6 +52,8 @@ const btnResume = document.getElementById('btn-resume') as HTMLButtonElement
 const btnRestart = document.getElementById('btn-restart') as HTMLButtonElement
 const btnPause = document.getElementById('btn-pause') as HTMLButtonElement
 const btnMute = document.getElementById('btn-mute') as HTMLButtonElement
+const btnPauseMute = document.getElementById('btn-pause-mute') as HTMLButtonElement
+const btnResetCar = document.getElementById('btn-reset-car') as HTMLButtonElement
 const hudActions = document.getElementById('hud-actions') as HTMLDivElement
 const playStatusEl = document.getElementById('play-status') as HTMLDivElement | null
 const scoreEl = document.getElementById('score') as HTMLSpanElement
@@ -362,12 +364,17 @@ function syncChrome() {
     btnPause.textContent = policy.pauseButtonLabel
     btnPause.setAttribute('aria-label', 'Pause game')
   }
-  if (btnMute) {
-    btnMute.setAttribute('aria-pressed', muted ? 'true' : 'false')
-    btnMute.textContent = muted ? 'Unmute' : 'Mute'
-    btnMute.setAttribute('aria-label', muted ? 'Unmute sound' : 'Mute sound')
-  }
+  syncMuteButton(btnMute, false)
+  syncMuteButton(btnPauseMute, true)
   syncPlayStatusOverlay()
+}
+
+function syncMuteButton(btn: HTMLButtonElement | null, caps: boolean) {
+  if (!btn) return
+  const label = muted ? 'Unmute' : 'Mute'
+  btn.setAttribute('aria-pressed', muted ? 'true' : 'false')
+  btn.textContent = caps ? label.toUpperCase() : label
+  btn.setAttribute('aria-label', muted ? 'Unmute sound' : 'Mute sound')
 }
 
 function ensureAudio() {
@@ -503,6 +510,14 @@ function resumeGame() {
   document.getElementById(RESUME_FOCUS_TARGET_ID)?.focus({ preventScroll: true })
 }
 
+function resetCarFromPause() {
+  if (phase !== 'paused') return
+  resetPlayerNearStart()
+  flash(pick(['Retry — pride intact', 'Retry — flamingos judging', 'Retry — HOA watching']))
+  beep(220, 0.1)
+  resumeGame()
+}
+
 function restartToTitle() {
   phase = 'title'
   keys.clear()
@@ -539,6 +554,8 @@ btnMute?.addEventListener('click', () => {
   // Finish the HUD action in gameplay so the next Space press is a handbrake.
   if (phase === 'playing') canvas.focus({ preventScroll: true })
 })
+btnPauseMute?.addEventListener('click', toggleMute)
+btnResetCar?.addEventListener('click', resetCarFromPause)
 
 document.addEventListener('keydown', (e) => {
   if (phase !== 'paused' || e.key !== 'Tab') return
@@ -579,7 +596,7 @@ window.addEventListener('keydown', (e) => {
   if (e.repeat && ['Escape', 'KeyP', 'KeyPause', 'KeyM', 'KeyN', 'KeyR'].includes(e.code)) return
   if (e.code === 'Enter') {
     const button = e.target instanceof HTMLElement ? e.target.closest('button') : null
-    const actionButton = button && [btnStart, btnResume, btnRestart, btnPause, btnMute].includes(button) ? button : null
+    const actionButton = button && [btnStart, btnResume, btnPauseMute, btnResetCar, btnRestart, btnPause, btnMute].includes(button) ? button : null
     if (e.repeat) {
       // Cancel the native click, including when a previous action moved focus
       // (HUD Mute hands focus back to the canvas mid-drive, so remember the press).
@@ -601,8 +618,9 @@ window.addEventListener('keydown', (e) => {
     }
     return
   }
-  // Pause moves focus to Resume; keep the shortcut available on either dialog action.
-  const onPauseAction = phase === 'paused' && (e.target === btnResume || e.target === btnRestart)
+  // Pause moves focus to Resume; keep the shortcut available on every dialog action.
+  const onPauseAction = phase === 'paused'
+    && [btnResume, btnPauseMute, btnResetCar, btnRestart].some(button => button && e.target === button)
   // Browser/platform combinations such as Ctrl/Cmd+P must not toggle gameplay.
   if ((e.code === 'KeyP' || e.code === 'KeyPause') && (!onUi || onPauseAction)
     && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -619,6 +637,11 @@ window.addEventListener('keydown', (e) => {
     resetPlayerNearStart()
     flash(pick(['Retry — pride intact', 'Retry — flamingos judging', 'Retry — HOA watching']))
     beep(220, 0.1)
+  }
+  // Ctrl/Cmd/Alt+R stays a browser shortcut (reload) while paused.
+  if (e.code === 'KeyR' && phase === 'paused' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    e.preventDefault()
+    resetCarFromPause()
   }
 })
 

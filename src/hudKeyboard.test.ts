@@ -45,7 +45,7 @@ function browserFixture() {
       return selector.split(',').some(tag => tag.trim().toUpperCase() === this.tagName) ? this : null
     }
     contains(target: Element) {
-      return this === target || (this.id === 'pause-overlay' && ['btn-resume', 'btn-restart'].includes(target.id))
+      return this === target || (this.id === 'pause-overlay' && ['btn-resume', 'btn-pause-mute', 'btn-reset-car', 'btn-restart'].includes(target.id))
     }
     focus() {
       if (document.activeElement === this) return
@@ -235,8 +235,12 @@ describe('HUD keyboard input during play', () => {
     browser.get('btn-mute').focus()
     expect(browser.document.activeElement?.id).toBe('btn-resume')
     expect(browser.key('keydown', 'Tab').defaultPrevented).toBe(true)
-    expect(browser.document.activeElement?.id).toBe('btn-restart')
+    expect(browser.document.activeElement?.id).toBe('btn-pause-mute')
     expect(browser.key('keydown', 'Tab', true).defaultPrevented).toBe(true)
+    expect(browser.document.activeElement?.id).toBe('btn-resume')
+    expect(browser.key('keydown', 'Tab', true).defaultPrevented).toBe(true)
+    expect(browser.document.activeElement?.id).toBe('btn-restart')
+    expect(browser.key('keydown', 'Tab').defaultPrevented).toBe(true)
     expect(browser.document.activeElement?.id).toBe('btn-resume')
     for (const code of ['Enter', 'Space']) {
       expect(browser.key('keydown', code).defaultPrevented).toBe(false)

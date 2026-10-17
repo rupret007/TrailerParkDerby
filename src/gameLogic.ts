@@ -285,7 +285,7 @@ export function shouldSuppressTouchGesture(targetIsInZoomablePanel: boolean): bo
 }
 
 /** Dialog actions that may receive Tab while paused. HUD Pause/Mute stay out. */
-export const PAUSE_DIALOG_ACTION_IDS = ['btn-resume', 'btn-restart'] as const
+export const PAUSE_DIALOG_ACTION_IDS = ['btn-resume', 'btn-pause-mute', 'btn-reset-car', 'btn-restart'] as const
 
 /** Gameplay surface to restore after Resume so driving keys are not eaten by a button. */
 export const RESUME_FOCUS_TARGET_ID = 'game'
