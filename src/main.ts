@@ -557,6 +557,9 @@ document.addEventListener('focusin', (e) => {
   btnResume?.focus()
 })
 
+// The action button a held Enter started on; its repeats stay cancelled until keyup.
+let enterHeldOnAction: HTMLButtonElement | null = null
+
 window.addEventListener('keydown', (e) => {
   const uiTarget = e.target instanceof HTMLElement ? e.target.closest('button, a, input, textarea') : null
   const onUi = !!uiTarget
@@ -574,12 +577,18 @@ window.addEventListener('keydown', (e) => {
   }
   // Keep held driving input above; toggles and retry act once per physical press.
   if (e.repeat && ['Escape', 'KeyP', 'KeyPause', 'KeyM', 'KeyN', 'KeyR'].includes(e.code)) return
-  if (e.repeat && e.code === 'Enter') {
+  if (e.code === 'Enter') {
     const button = e.target instanceof HTMLElement ? e.target.closest('button') : null
-    if (button && [btnStart, btnResume, btnRestart, btnPause, btnMute].includes(button)) {
-      // Cancel the native click, including when a previous action moved focus.
-      e.preventDefault()
-      return
+    const actionButton = button && [btnStart, btnResume, btnRestart, btnPause, btnMute].includes(button) ? button : null
+    if (e.repeat) {
+      // Cancel the native click, including when a previous action moved focus
+      // (HUD Mute hands focus back to the canvas mid-drive, so remember the press).
+      if (actionButton || enterHeldOnAction) {
+        e.preventDefault()
+        return
+      }
+    } else {
+      enterHeldOnAction = actionButton
     }
   }
   if (e.code === 'Escape') {
@@ -613,7 +622,10 @@ window.addEventListener('keydown', (e) => {
   }
 })
 
-window.addEventListener('keyup', (e) => keys.delete(e.code))
+window.addEventListener('keyup', (e) => {
+  keys.delete(e.code)
+  if (e.code === 'Enter') enterHeldOnAction = null
+})
 
 function trailerPose() {
   const t = trailer.progress

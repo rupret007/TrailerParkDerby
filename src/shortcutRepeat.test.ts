@@ -128,6 +128,9 @@ describe('one-shot shortcut auto-repeat', () => {
     h.get('btn-mute').focus()
     expect(h.enter().preventDefault).not.toHaveBeenCalled()
     expect(h.state().muted).toBe(true)
+    // HUD Mute hands focus back to the canvas mid-drive (T12), so the held
+    // repeats below target the canvas and must still be cancelled.
+    expect(h.active()).toBe('game')
     for (let i = 0; i < 3; i++) {
       const repeat = h.enter(true)
       expect(h.state().muted).toBe(true)
@@ -135,6 +138,8 @@ describe('one-shot shortcut auto-repeat', () => {
       expect(repeat.preventDefault).toHaveBeenCalledTimes(1)
     }
     h.release('Enter')
+    // A fresh press on Mute (player Tabs back to it) toggles again.
+    h.get('btn-mute').focus()
     expect(h.enter().preventDefault).not.toHaveBeenCalled()
     expect(h.state().muted).toBe(false)
     expect(h.storageWrite).toHaveBeenCalledTimes(2)
