@@ -126,6 +126,16 @@ export function localTrailerCoords(px: number, py: number, pose: TrailerPose): V
   return { x: dx * c - dy * s, y: dx * s + dy * c }
 }
 
+/** Hitch gap as a fraction of cab length — same number the flatbed is drawn with. */
+export const TRAILER_BED_CAB_GAP = 0.12
+
+/** Local-X span of the empty deck. `start` is the cab-side edge; `end` is the tail. */
+export function trailerBedLocalX(trailer: TrailerSpec): { start: number; end: number; mid: number } {
+  const start = -(trailer.cabL * TRAILER_BED_CAB_GAP)
+  const end = start - trailer.bedL
+  return { start, end, mid: start - trailer.bedL / 2 }
+}
+
 export function pointInTrailerBed(
   px: number,
   py: number,
@@ -133,9 +143,8 @@ export function pointInTrailerBed(
   trailer: TrailerSpec,
 ): boolean {
   const { x: lx, y: ly } = localTrailerCoords(px, py, pose)
-  const bedStart = -(trailer.cabL * 0.15)
-  const bedEnd = -(trailer.cabL * 0.15 + trailer.bedL)
-  return lx <= bedStart && lx >= bedEnd && Math.abs(ly) <= trailer.bedW / 2 - 2
+  const { start, end } = trailerBedLocalX(trailer)
+  return lx <= start && lx >= end && Math.abs(ly) <= trailer.bedW / 2 - 2
 }
 
 export function isParkHoldReady(inBed: boolean, speed: number): boolean {
@@ -157,7 +166,7 @@ export function evaluatePark(
   nextStreak: number
 } {
   const { x: lx, y: ly } = localTrailerCoords(player.x, player.y, pose)
-  const bedMidX = -(trailer.cabL * 0.15 + trailer.bedL / 2)
+  const bedMidX = trailerBedLocalX(trailer).mid
   const centered = Math.abs(lx - bedMidX) < PARK_CENTER_X && Math.abs(ly) < PARK_CENTER_Y
   const slow = Math.abs(player.speed) < PARK_SLOW_SPEED
   const perfect = centered && slow
