@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import {
   AI_SPAWN_PHASES,
   aiLaneOffset,
+  aiSpawnKinematics,
   applySoftTrackPull,
   clamp,
   clampDt,
@@ -34,8 +35,11 @@ import {
   RESUME_FOCUS_TARGET_ID,
   pointInTrailerBed,
   pointOnTrack,
+  shouldPlayRadioLine,
   shouldResetComboOnMiss,
   stepPlayer,
+  TRAILER_BED_CAB_GAP,
+  trailerBedLocalX,
   stepTrailerProgress,
   tangentOnTrack,
   tickBoostRemain,
@@ -124,8 +128,24 @@ describe('trailer bed + park scoring', () => {
   const pose = { x: 400, y: 300, angle: 0 }
   const trailer = DEFAULT_TRAILER
 
+  it('shares one cab-gap with the drawn deck so hit-test edges match the art', () => {
+    expect(TRAILER_BED_CAB_GAP).toBe(0.12)
+    const { start, end, mid } = trailerBedLocalX(trailer)
+    expect(start).toBeCloseTo(-(trailer.cabL * 0.12))
+    expect(end).toBeCloseTo(start - trailer.bedL)
+    expect(mid).toBeCloseTo(start - trailer.bedL / 2)
+    // Cab-side lip of the painted deck is in; a step toward the cab is not.
+    expect(pointInTrailerBed(pose.x + start - 0.01, pose.y, pose, trailer)).toBe(true)
+    expect(pointInTrailerBed(pose.x + start + 0.01, pose.y, pose, trailer)).toBe(false)
+    // Tail of the painted deck is in; a step past the tail is not.
+    expect(pointInTrailerBed(pose.x + end + 0.01, pose.y, pose, trailer)).toBe(true)
+    expect(pointInTrailerBed(pose.x + end - 0.01, pose.y, pose, trailer)).toBe(false)
+    expect(mainTsSource).toMatch(/const bedX = trailerBedLocalX\(trailer\)\.end/)
+    expect(mainTsSource).not.toMatch(/-trailer\.cabL \* 0\.1[25]/)
+  })
+
   it('accepts the bed center and rejects the cab / sides', () => {
-    const bedMidX = -(trailer.cabL * 0.15 + trailer.bedL / 2)
+    const bedMidX = trailerBedLocalX(trailer).mid
     expect(pointInTrailerBed(pose.x + bedMidX, pose.y, pose, trailer)).toBe(true)
     expect(pointInTrailerBed(pose.x + 20, pose.y, pose, trailer)).toBe(false)
     expect(pointInTrailerBed(pose.x + bedMidX, pose.y + 40, pose, trailer)).toBe(false)
@@ -139,7 +159,7 @@ describe('trailer bed + park scoring', () => {
   })
 
   it('scores a normal park then a perfect stack with the original formula', () => {
-    const bedMidX = -(trailer.cabL * 0.15 + trailer.bedL / 2)
+    const bedMidX = trailerBedLocalX(trailer).mid
     const normal = evaluatePark({ x: pose.x + bedMidX, y: pose.y + 12, speed: 40 }, pose, trailer, 3, 0)
     expect(normal.perfect).toBe(false)
     expect(normal.gained).toBe(300)
@@ -154,7 +174,7 @@ describe('trailer bed + park scoring', () => {
   })
 
   it('caps combo at 9 and perfect streak at 5', () => {
-    const bedMidX = -(trailer.cabL * 0.15 + trailer.bedL / 2)
+    const bedMidX = trailerBedLocalX(trailer).mid
     const r = evaluatePark({ x: pose.x + bedMidX, y: pose.y, speed: 0 }, pose, trailer, 9, 5)
     expect(r.nextCombo).toBe(9)
     expect(r.nextStreak).toBe(5)
@@ -169,6 +189,16 @@ describe('trailer bed + park scoring', () => {
   it('decays the park timer at 1.2x when not holding', () => {
     expect(decayParkTimer(1, 0.5)).toBeCloseTo(0.4)
     expect(decayParkTimer(0.1, 1)).toBe(0)
+  })
+
+  it('keeps radio chatter off an active park hold and off a fresh flash', () => {
+    expect(shouldPlayRadioLine(0, 0)).toBe(true)
+    expect(shouldPlayRadioLine(0.4, 0)).toBe(true)
+    expect(shouldPlayRadioLine(0.41, 0)).toBe(false)
+    expect(shouldPlayRadioLine(0, 0.01)).toBe(false)
+    expect(shouldPlayRadioLine(2.1, 1.2)).toBe(false)
+    expect(mainTsSource).toMatch(/if \(!shouldPlayRadioLine\(messageT, parkTimer\)\) return/)
+    expect(mainTsSource).not.toMatch(/if \(messageT > 0\.4\) return/)
   })
 })
 
@@ -282,6 +312,35 @@ describe('spawn clearance', () => {
 
   it('uses the opposite lane from AI at the spawn phase so a sitting player is not bonked', () => {
     expect(Math.abs(PLAYER_SPAWN_LANE - aiLaneOffset(PLAYER_SPAWN_PHASE))).toBeGreaterThan(26)
+  })
+
+  it('snaps each rival back to its named start phase and centerline pose', () => {
+    const drifted = AI_SPAWN_PHASES.map((phase, i) =>
+      aiSpawnKinematics(i === 3 ? PLAYER_SPAWN_PHASE : phase + 0.2, geom),
+    )
+    expect(spawnClearOfTraffic(PLAYER_SPAWN_PHASE, drifted.map((car) => car.aiPhase))).toBe(false)
+
+    const reset = drifted.map((_, i) => aiSpawnKinematics(AI_SPAWN_PHASES[i]!, geom))
+    expect(spawnClearOfTraffic(PLAYER_SPAWN_PHASE, reset.map((car) => car.aiPhase))).toBe(true)
+    for (const [i, car] of reset.entries()) {
+      const home = pointOnTrack(AI_SPAWN_PHASES[i]!, geom)
+      const tan = tangentOnTrack(AI_SPAWN_PHASES[i]!, geom)
+      expect(car.aiPhase).toBeCloseTo(AI_SPAWN_PHASES[i]!, 10)
+      expect(car.x).toBeCloseTo(home.x)
+      expect(car.y).toBeCloseTo(home.y)
+      expect(car.angle).toBeCloseTo(Math.atan2(tan.y, tan.x))
+      expect(car.speed).toBeCloseTo(140 + AI_SPAWN_PHASES[i]! * 40)
+    }
+  })
+
+  it('Start resets the live AI pack, not only the player and trailer', () => {
+    const startGame = mainTsSource.match(/function startGame\(\) \{[\s\S]*?\n\}/)?.[0] ?? ''
+    expect(startGame).toMatch(/resetAiPack\(\)/)
+    expect(startGame).toMatch(/resetPlayerNearStart\(\)/)
+    expect(startGame).toMatch(/trailer\.progress = 0\.05/)
+    expect(mainTsSource).toMatch(/function resetAiPack\(\)/)
+    expect(mainTsSource).toMatch(/aiSpawnKinematics\(AI_SPAWN_PHASES\[i\]/)
+    expect(mainTsSource).toMatch(/function makeAi\([\s\S]*?aiSpawnKinematics\(phase, geom\)/)
   })
 })
 

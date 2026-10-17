@@ -1,6 +1,8 @@
 import './style.css'
 import { drawPlayerLabel, rotatedBounds } from './playerLabel'
 import {
+  AI_SPAWN_PHASES,
+  aiSpawnKinematics,
   applySoftTrackPull,
   clampDt,
   collectBoost,
@@ -27,6 +29,7 @@ import {
   pointInTrailerBed as pointInTrailerBedAt,
   pointOnTrack as pointOnTrackAt,
   RESUME_FOCUS_TARGET_ID,
+  shouldPlayRadioLine,
   shouldResetComboOnMiss,
   shouldSuppressTouchGesture,
   stepPlayer,
@@ -35,6 +38,7 @@ import {
   tickBoostRemain,
   tickOrbRespawn,
   TRACK,
+  trailerBedLocalX,
   type RunPhase,
 } from './gameLogic'
 
@@ -255,22 +259,22 @@ function makeAi(
   name = 'Rival',
   kind: 'sedan' | 'van' = 'sedan',
 ): Car {
-  const p = pointOnTrack(phase)
-  const tan = tangentOnTrack(phase)
   const isVan = kind === 'van'
   return {
-    x: p.x,
-    y: p.y,
-    angle: Math.atan2(tan.y, tan.x),
-    speed: 140 + phase * 40,
+    ...aiSpawnKinematics(phase, geom),
     color,
     isPlayer: false,
-    aiPhase: phase,
     width: isVan ? 20 : 16,
     length: isVan ? 36 : 30,
     name,
     kind,
   }
+}
+
+function resetAiPack() {
+  aiCars.forEach((car, i) => {
+    Object.assign(car, aiSpawnKinematics(AI_SPAWN_PHASES[i] ?? car.aiPhase, geom))
+  })
 }
 
 function pick<T>(arr: T[]): T {
@@ -459,6 +463,7 @@ function startGame() {
   hornCd = 0
   trailer.progress = 0.05
   placeBoosts()
+  resetAiPack()
   resetPlayerNearStart()
   scoreEl.textContent = '0'
   comboEl.textContent = '1'
@@ -567,6 +572,16 @@ window.addEventListener('keydown', (e) => {
       e.preventDefault()
     }
   }
+  // Keep held driving input above; toggles and retry act once per physical press.
+  if (e.repeat && ['Escape', 'KeyP', 'KeyPause', 'KeyM', 'KeyN', 'KeyR'].includes(e.code)) return
+  if (e.repeat && e.code === 'Enter') {
+    const button = e.target instanceof HTMLElement ? e.target.closest('button') : null
+    if (button && [btnStart, btnResume, btnRestart, btnPause, btnMute].includes(button)) {
+      // Cancel the native click, including when a previous action moved focus.
+      e.preventDefault()
+      return
+    }
+  }
   if (e.code === 'Escape') {
     if (phase === 'playing') {
       e.preventDefault()
@@ -577,7 +592,11 @@ window.addEventListener('keydown', (e) => {
     }
     return
   }
-  if ((e.code === 'KeyP' || e.code === 'KeyPause') && !onUi) {
+  // Pause moves focus to Resume; keep the shortcut available on either dialog action.
+  const onPauseAction = phase === 'paused' && (e.target === btnResume || e.target === btnRestart)
+  // Browser/platform combinations such as Ctrl/Cmd+P must not toggle gameplay.
+  if ((e.code === 'KeyP' || e.code === 'KeyPause') && (!onUi || onPauseAction)
+    && !e.ctrlKey && !e.metaKey && !e.altKey) {
     if (phase === 'playing') pauseGame()
     else if (phase === 'paused') resumeGame()
   }
@@ -744,7 +763,7 @@ function updateRadio(dt: number) {
   radioT -= dt
   if (radioT > 0) return
   radioT = 10 + Math.random() * 14
-  if (messageT > 0.4) return
+  if (!shouldPlayRadioLine(messageT, parkTimer)) return
   flash(
     pick([
       'RADIO: “Keep the flamingos upright.”',
@@ -1233,7 +1252,7 @@ function drawTrailer() {
   ctx.translate(pose.x, pose.y)
   ctx.rotate(pose.angle)
 
-  const bedX = -trailer.cabL * 0.12 - trailer.bedL
+  const bedX = trailerBedLocalX(trailer).end
 
   // hitch
   ctx.fillStyle = '#666'
